@@ -1,2 +1,5 @@
 collisions/
 gametestserver/
+
+server/*.beam
+server/*.bin
