@@ -34,8 +34,7 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
                     end,
                     {Players, Rest} = lists:split(4, NewWaitingPlayers),
                     io:format("MATCHMAKER: Starting game with players: ~p~n", [Players]),
-                    % game_session:start_game(Players),
-                    [P ! {game_started, 123} || P <- Players],
+                    game_session:start_game(Players, self()),
                     loop(Rest, ActiveGames + 1, undefined);
                 % Verificar se o timer já existe para evitar criar múltiplos timers desnecessários
                 length(NewWaitingPlayers) =:= 3 andalso ActiveGames < 4 andalso
@@ -57,14 +56,13 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
             case length(WaitingPlayers) >= 3 of
                 true ->
                     {Players, Rest} = lists:split(3, WaitingPlayers),
-                    % game_session:start_game(Players),
                     io:format("MATCHMAKER: Starting game with players: ~p~n", [Players]),
-                    [P ! {game_started, 123} || P <- Players],
+                    game_session:start_game(Players, self()),
                     loop(Rest, ActiveGames + 1, undefined);
                 false ->
                     loop(WaitingPlayers, ActiveGames, TimerRef)
             end;
-        match_finished ->
+        game_finished ->
             io:format("MATCHMAKER: Game finished. Active games: ~p~n", [ActiveGames - 1]),
             loop(WaitingPlayers, ActiveGames - 1, TimerRef)
     end.
