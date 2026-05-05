@@ -138,14 +138,23 @@ waiting_for_game(Sock, Username) ->
 
 in_game(Sock, Username, GamePid) ->
     receive
+        {game_over, Score} ->
+            io:format("SERVER: Game over for user ~p. Score: ~p~n", [Username, Score]),
+            gen_tcp:send(Sock, io_lib:format("GAME_OVER,~p\n", [Score])),
+            user_auth(Sock, Username);
         {line, Data} ->
             gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
         {tcp, _, Data} ->
             Line = string:trim(binary_to_list(Data)),
             % Enviar comandos do jogador para o processo do jogo
-            GamePid ! {player_command, Username, Line},
-            in_game(Sock, Username, GamePid);
+            case string:split(Line, ",", all) of
+                ["INPUT", Directions] ->
+                    GamePid ! {input, self(), Directions},
+                    in_game(Sock, Username, GamePid);
+                _ ->
+                    in_game(Sock, Username, GamePid)
+            end;
         {tcp_closed, _} ->
             ok;
         {tcp_error, _, _} ->
