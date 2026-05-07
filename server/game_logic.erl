@@ -1,17 +1,53 @@
 -module(game_logic).
 -export([
+    create_player/2,
+    create_food/0,
+    create_poison/0,
     calculate_spawn_positions/2,
+    accelerate_forward/1,
+    turn_left/1,
+    turn_right/1,
     update_player/1,
     check_food_collisions/2,
     check_poison_collisions/2,
-    check_player_collisions/1
+    check_player_collisions/1,
+    get_min_player_radius/1,
+    manage_world_foods/2,
+    manage_world_poisons/1
 ]).
 -include("game_entities.hrl").
 -include("game_constants.hrl").
 
+% --------------------------------------------------------------------------------------------
+% ENTIDADES
+% --------------------------------------------------------------------------------------------
+% Criar jogador com atributos iniciais
+create_player(Id, {X, Y}) ->
+    #player{id = Id, x = X, y = Y}.
+
+% Criar comida com raio entre 5 e 25 e massa entre 10 e 40
+create_food() ->
+    #food{
+        id = erlang:unique_integer([monotonic, positive]),
+        x = rand:uniform(?MAP_WIDTH - 25) + 25,
+        y = rand:uniform(?MAP_HEIGHT - 25) + 25,
+        radius = 4 + rand:uniform(21),
+        mass = 9 + rand:uniform(31)
+    }.
+
+% Criar veneno com raio entre 8 e 35 e massa entre 10 e 35
+create_poison() ->
+    #poison{
+        id = erlang:unique_integer([monotonic, positive]),
+        x = rand:uniform(?MAP_WIDTH - 25) + 25,
+        y = rand:uniform(?MAP_HEIGHT - 25) + 25,
+        radius = 7 + rand:uniform(28),
+        mass = 9 + rand:uniform(26)
+    }.
+
 % Define posições iniciais para 3 ou 4 jogadores,
 % garantindo que estão suficientemente distantes do centro e entre si.
-calculate_spawn_positions(4, Radius) ->
+calculate_spawn_positions(4, _) ->
     [
         {?MAP_WIDTH div 4, ?MAP_HEIGHT div 4},
         {3 * ?MAP_WIDTH div 4, ?MAP_HEIGHT div 4},
@@ -91,12 +127,12 @@ check_boundaries(Pos, Vel, Radius, Max) ->
 calculate_distance({X1, Y1}, {X2, Y2}) ->
     math:sqrt(math:pow(X2 - X1, 2) + math:pow(Y2 - Y1, 2)).
 
-% Verificar se dois círculos (jogadores, comida, veneno) colidem
+% Verificar se dois círculos (jogadores, Foods, Poisons) colidem
 check_overlap({X1, Y1}, {X2, Y2}, Radius1, Radius2) ->
     Distance = calculate_distance({X1, Y1}, {X2, Y2}),
     Distance < (Radius1 + Radius2).
 
-% Verificar se um círculo (jogador) contém completamente outro (comida, veneno)
+% Verificar se um círculo (jogador) contém completamente outro (Food, Poison)
 check_fully_contains({X1, Y1}, {X2, Y2}, Radius1, Radius2) ->
     Distance = calculate_distance({X1, Y1}, {X2, Y2}),
     Distance + Radius2 < Radius1.
@@ -116,7 +152,7 @@ player_eats_player(Eater, Eaten) ->
     {NewEater, respawn_player(NewEaten)}.
 
 % Jogador faz respawn em posição aleatória do mapa
-% Melhorar para evitar dar spawn em cima de outros jogadores/comida/veneno
+% Melhorar para evitar dar spawn em cima de outros jogadores/Foods/Poisons
 respawn_player(P) ->
     P#player{
         x = P#player.radius + rand:uniform(?MAP_WIDTH - P#player.radius),
@@ -129,7 +165,7 @@ respawn_player(P) ->
         moving_right = false
     }.
 
-% Verificar colisões com comida, atualizar massa do jogador e remover comida do mapa
+% Verificar colisões com Foods, atualizar massa do jogador e remover Foods do mapa
 check_food_collisions(P, Foods) ->
     maps:fold(
         fun(Id, Food, {NewP, NewFoods}) ->
@@ -151,7 +187,7 @@ check_food_collisions(P, Foods) ->
         Foods
     ).
 
-% Verificar colisões com veneno, atualizar massa do jogador e remover veneno do mapa
+% Verificar colisões com Poisons, atualizar massa do jogador e remover Poisons do mapa
 check_poison_collisions(P, Poisons) ->
     maps:fold(
         fun(Id, Poison, {NewP, NewPoisons}) ->
@@ -228,4 +264,62 @@ check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc) ->
                 _ ->
                     check_one_vs_others(P1, Rest, [{Pid2, P2} | Acc])
             end
+    end.
+
+% Obter o menor raio entre os jogadores
+get_min_player_radius(Players) ->
+    PlayersRadius = [P#player.radius || P <- maps:values(Players)],
+
+    case PlayersRadius of
+        [] -> 0;
+        _ -> lists:min(PlayersRadius)
+    end.
+
+% Verificar se há Foods menores que o raio fornecido (menor jogador)
+check_smaller_food(Foods, MinRadius) ->
+    % Filtrar alimentos menores que o menor jogador
+    SmallerFoods = maps:filter(fun(_, F) -> F#food.radius < MinRadius end, Foods),
+
+    maps:size(SmallerFoods) > 0.
+
+% Fazer a gestão de Foods no mundo
+manage_world_foods(Foods, MinRadius) ->
+    % Garantir número mínimo de foods
+    NewFoods = fill_entities(Foods, ?MIN_FOODS, food),
+
+    % Garantir que haja pelo menos um alimento menor que o menor jogador
+    case check_smaller_food(NewFoods, MinRadius) of
+        % Se já existe, manter o Foods atual
+        true ->
+            NewFoods;
+        % Se não existe, criar um novo com raio menor que o menor jogador
+        false ->
+            NewFood = create_food(),
+            maps:put(
+                NewFood#food.id,
+                NewFood#food{radius = MinRadius - 1.0, mass = math:pow(MinRadius - 1.0, 2)},
+                NewFoods
+            )
+    end.
+
+% Fazer a gestão de Poisons no mundo
+manage_world_poisons(Poisons) ->
+    % Garantir número mínimo de venenos
+    fill_entities(Poisons, ?MIN_POISONS, poison).
+
+% Função auxiliar que preenche o mapa até ao N desejado
+fill_entities(Entities, Min, Type) ->
+    CurrentSize = maps:size(Entities),
+    case CurrentSize < Min of
+        true ->
+            case Type of
+                food ->
+                    E = create_food(),
+                    fill_entities(maps:put(E#food.id, E, Entities), Min, food);
+                poison ->
+                    E = create_poison(),
+                    fill_entities(maps:put(E#poison.id, E, Entities), Min, poison)
+            end;
+        false ->
+            Entities
     end.
