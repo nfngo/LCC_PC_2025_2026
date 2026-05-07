@@ -11,12 +11,14 @@ init(PlayerPids, MatchmakerPid) ->
     Players = create_players(PlayerPids),
     io:format("GAME_SESSION: players:\n ~p~n", [Players]),
 
-    % Inicializar Foods com IDs de 1 a 12
-    Foods = maps:from_list([{I, create_food(I)} || I <- lists:seq(1, 12)]),
+    % Inicializar Foods (inicialmente 12)
+    FoodsList = [game_logic:create_food() || _ <- lists:seq(1, 12)],
+    Foods = maps:from_list([{F#food.id, F} || F <- FoodsList]),
     io:format("GAME_SESSION: foods:\n ~p~n", [Foods]),
 
-    % Inicializar Poisons com IDs de 100 a 115 (para evitar colisão com IDs de Foods)
-    Poisons = maps:from_list([{I, create_poison(I)} || I <- lists:seq(100, 115)]),
+    % Inicializar Poisons (inicialmente 15)
+    PoisonsList = [game_logic:create_poison() || _ <- lists:seq(1, 15)],
+    Poisons = maps:from_list([{P#poison.id, P} || P <- PoisonsList]),
     io:format("GAME_SESSION: poisons:\n ~p~n", [Poisons]),
 
     % Notificar jogadores
@@ -35,30 +37,10 @@ create_players(PlayerPids) ->
 
     maps:from_list(
         [
-            {Pid, #player{id = Id, x = X, y = Y}}
-         || {Pid, Id, {X, Y}} <- lists:zip3(PlayerPids, Ids, Positions)
+            {Pid, game_logic:create_player(Id, Pos)}
+         || {Pid, Id, Pos} <- lists:zip3(PlayerPids, Ids, Positions)
         ]
     ).
-
-% Criar comida com raio entre 5 e 25 e massa entre 10 e 40
-create_food(Id) ->
-    #food{
-        id = Id,
-        x = rand:uniform(?MAP_WIDTH),
-        y = rand:uniform(?MAP_HEIGHT),
-        radius = 4 + rand:uniform(21),
-        mass = 9 + rand:uniform(31)
-    }.
-
-% Criar veneno com raio entre 8 e 35 e massa entre 10 e 35
-create_poison(Id) ->
-    #poison{
-        id = Id,
-        x = rand:uniform(?MAP_WIDTH),
-        y = rand:uniform(?MAP_HEIGHT),
-        radius = 7 + rand:uniform(28),
-        mass = 9 + rand:uniform(26)
-    }.
 
 loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft) ->
     receive
@@ -89,15 +71,24 @@ loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft) ->
                     % Processar o movimento de cada jogador
                     MovedPlayers = process_movement(Players),
 
-                    % Verificar Colisões
-                    {FinalPlayers, FinalFoods, FinalPoisons} = check_collisions(
+                    % Verificar colisões
+                    {FinalPlayers, NewFoods, NewPoisons} = check_collisions(
                         MovedPlayers, Foods, Poisons
                     ),
+
+                    % Obter raio do menor jogador
+                    MinRadius = game_logic:get_min_player_radius(Players),
+
+                    % Verificar se existe um número mínimo de Foods e Poisons
+                    % MIN_FOODS = 6, MIN_POISONS = 8
+                    % Garantir a existência de pelo menos uma Food com raio menor que o menor jogador
+                    FinalFoods = game_logic:manage_world_foods(NewFoods, MinRadius),
+                    FinalPoisons = game_logic:manage_world_poisons(NewPoisons),
 
                     % C. Enviar novo estado para todos os jogadores
                     % broadcast_state(FinalPlayers, FinalFoods, FinalPoisons),
 
-                    loop(MovedPlayers, Foods, Poisons, MatchmakerPid, NewTimeLeft)
+                    loop(MovedPlayers, FinalFoods, FinalPoisons, MatchmakerPid, NewTimeLeft)
             end
     end.
 
