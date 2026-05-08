@@ -2,22 +2,20 @@
 -export([build/0]).
 
 build() ->
-    Modules = [game_logic, game_session, matchmaker, login_manager, server],
+    Modules = [game_serialization, game_logic, game_session, matchmaker, login_manager, server],
+    WithInclude = [game_session, game_logic, game_serialization],
+
     lists:foreach(
-        fun(Mod) ->
-            case Mod of
-                game_session ->
-                    Res = compile:file(Mod, [{i, "include"}]);
-                game_logic ->
-                    Res = compile:file(Mod, [{i, "include"}]);
-                _ ->
-                    Res = compile:file(Mod)
-            end,
-            case Res of
-                {ok, M} ->
-                    io:format("OK: ~p compiled!~n", [M]);
-                error ->
-                    io:format("!ERROR! on file: ~p~n", [Mod])
+        fun(Module) ->
+            Options =
+                case lists:member(Module, WithInclude) of
+                    true -> [{i, "include"}];
+                    false -> []
+                end,
+
+            case compile:file(Module, Options) of
+                {ok, M} -> io:format("OK: ~p compiled!~n", [M]);
+                _ -> io:format("!ERROR! on file: ~p~n", [Module])
             end
         end,
         Modules
