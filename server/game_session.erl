@@ -21,13 +21,25 @@ init(PlayerPids, MatchmakerPid) ->
     Poisons = maps:from_list([{P#poison.id, P} || P <- PoisonsList]),
     io:format("GAME_SESSION: poisons:\n ~p~n", [Poisons]),
 
+    % Criar timestamp para permitir interpolação no cliente
+    TimeStamp = erlang:system_time(millisecond),
+
+    % Serializar o estado inicial
+    InitialState = game_serialization:serialize_world(Players, Foods, Poisons),
+
     % Notificar jogadores
-    [Pid ! {game_started, self()} || Pid <- PlayerPids],
+    maps:foreach(
+        fun(Pid, P) ->
+            Header = io_lib:format("STATE,ID,~p,TS,~p;", [P#player.id, TimeStamp]),
+            Pid ! {game_started, self(), list_to_binary([Header, InitialState, ";\n"])}
+        end,
+        Players
+    ),
 
     % Enviar a mensagem 'tick' para este processo (self()) a cada 50ms
-    timer:send_interval(?TICK_INTERVAL, self(), tick),
+    TimerRef = timer:send_interval(?TICK_INTERVAL, self(), tick),
 
-    loop(Players, Foods, Poisons, MatchmakerPid, ?GAME_TIME).
+    loop(Players, Foods, Poisons, MatchmakerPid, ?GAME_TIME, TimerRef).
 
 % Criar jogadores e atribui posições iniciais no mapa
 create_players(PlayerPids) ->
@@ -42,7 +54,7 @@ create_players(PlayerPids) ->
         ]
     ).
 
-loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft) ->
+loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft, TimerRef) ->
     receive
         {input, PlayerPid, {Left, Up, Right}} ->
             case maps:find(PlayerPid, Players) of
@@ -55,9 +67,9 @@ loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft) ->
                     },
                     % Guardar no mapa e continuar o loop
                     NewPlayers = maps:put(PlayerPid, NewPlayer, Players),
-                    loop(NewPlayers, Foods, Poisons, MatchmakerPid, TimeLeft);
+                    loop(NewPlayers, Foods, Poisons, MatchmakerPid, TimeLeft, TimerRef);
                 error ->
-                    loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft)
+                    loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft, TimerRef)
             end;
         tick ->
             % Calcular quanto tempo falta
@@ -66,14 +78,15 @@ loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft) ->
             if
                 % Se o tempo acabou, terminar o jogo
                 NewTimeLeft =< 0 ->
+                    timer:cancel(TimerRef),
                     end_game(Players, MatchmakerPid);
                 true ->
-                    % Processar o movimento de cada jogador
-                    MovedPlayers = process_movement(Players),
+                    % Processar o movimento de cada jogador e obter os jogadores que se moveram
+                    {NewPlayers, PlayersMoving} = process_movement(Players),
 
                     % Verificar colisões
-                    {FinalPlayers, NewFoods, NewPoisons} = check_collisions(
-                        MovedPlayers, Foods, Poisons
+                    {FinalPlayers, NewFoods, NewPoisons, RemovedIDs} = check_collisions(
+                        NewPlayers, Foods, Poisons
                     ),
 
                     % Obter raio do menor jogador
@@ -82,55 +95,76 @@ loop(Players, Foods, Poisons, MatchmakerPid, TimeLeft) ->
                     % Verificar se existe um número mínimo de Foods e Poisons
                     % MIN_FOODS = 6, MIN_POISONS = 8
                     % Garantir a existência de pelo menos uma Food com raio menor que o menor jogador
-                    FinalFoods = game_logic:manage_world_foods(NewFoods, MinRadius),
-                    FinalPoisons = game_logic:manage_world_poisons(NewPoisons),
+                    {FinalFoods, CreatedFoods} = game_logic:manage_world_foods(NewFoods, MinRadius),
+                    {FinalPoisons, CreatedPoisons} = game_logic:manage_world_poisons(NewPoisons),
 
-                    % C. Enviar novo estado para todos os jogadores
-                    % broadcast_state(FinalPlayers, FinalFoods, FinalPoisons),
+                    CreatedEntities = CreatedFoods ++ CreatedPoisons,
+                    % Verificar se há alterações nos jogadores, Foods ou Poisons e enviar apenas as alterações
+                    case {maps:size(PlayersMoving), RemovedIDs, CreatedEntities} of
+                        {0, [], []} ->
+                            ok;
+                        _ ->
+                            TimeStamp = erlang:system_time(millisecond),
+                            % Enviamos apenas os jogadores que se mexeram (PlayersMoving)
+                            % Enviar alterações/delta para todos os jogadores
+                            send_changes_to_players(
+                                PlayersMoving, CreatedEntities, RemovedIDs, TimeStamp
+                            )
+                    end,
 
-                    loop(MovedPlayers, FinalFoods, FinalPoisons, MatchmakerPid, NewTimeLeft)
+                    loop(
+                        FinalPlayers, FinalFoods, FinalPoisons, MatchmakerPid, NewTimeLeft, TimerRef
+                    )
             end
     end.
 
 process_movement(Players) ->
-    maps:map(
-        fun(_, P) ->
-            % Aplicar alterações baseadas no input recebido do jogador
-            P1 =
+    maps:fold(
+        fun(Pid, Player, {AccAll, AccMoving}) ->
+            % Calcular o movimento do jogador com base no input recebido
+            UpdatedPlayer = game_logic:apply_player_input(Player),
+
+            % Verificar se está em movimento
+            IsMoving = game_logic:is_player_moving(UpdatedPlayer),
+
+            NewAccMoving =
                 if
-                    P#player.moving_up -> game_logic:accelerate_forward(P);
-                    true -> P
-                end,
-            P2 =
-                if
-                    P#player.moving_left -> game_logic:turn_left(P1);
-                    true -> P1
-                end,
-            P3 =
-                if
-                    P#player.moving_right -> game_logic:turn_right(P2);
-                    true -> P2
+                    IsMoving -> maps:put(Pid, UpdatedPlayer, AccMoving);
+                    true -> AccMoving
                 end,
 
-            % Mover o objeto
-            game_logic:update_player(P3)
+            {maps:put(Pid, UpdatedPlayer, AccAll), NewAccMoving}
         end,
+        {#{}, #{}},
         Players
     ).
 
 check_collisions(Players, Foods, Poisons) ->
     % Verificar colisões com Comida
-    {UpdatedPlayers1, RemainingFoods} = game_logic:check_food_collisions(Players, Foods),
+    {UpdatedPlayers1, RemainingFoods, RemovedFoodIDs} = game_logic:check_food_collisions(
+        Players, Foods
+    ),
 
     % Verificar colisões com Veneno
-    {UpdatedPlayers2, RemainingPoisons} = game_logic:check_poison_collisions(
+    {UpdatedPlayers2, RemainingPoisons, RemovedPoisonIDs} = game_logic:check_poison_collisions(
         UpdatedPlayers1, Poisons
     ),
 
     % Verificar colisões entre jogadores
-    {FinalPlayers} = game_logic:check_player_collisions(UpdatedPlayers2),
+    FinalPlayers = game_logic:check_player_collisions(UpdatedPlayers2),
 
-    {FinalPlayers, RemainingFoods, RemainingPoisons}.
+    {FinalPlayers, RemainingFoods, RemainingPoisons, RemovedFoodIDs ++ RemovedPoisonIDs}.
+
+% Enviar as alterações (delta) para os jogadores
+send_changes_to_players(Players, NewEntities, RemovedIDs, TimeStamp) ->
+    Delta = game_serialization:serialize_changes(Players, NewEntities, RemovedIDs),
+    maps:foreach(
+        fun(Pid, P) ->
+            Header = io_lib:format("DELTA,ID,~p,TS,~p;", [P#player.id, TimeStamp]),
+            Pid ! {delta_update, list_to_binary([Header, Delta, ";\n"])}
+        end,
+        Players
+    ).
 
 end_game(Players, MatchmakerPid) ->
     % A implementar:
