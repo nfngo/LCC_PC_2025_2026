@@ -8,6 +8,8 @@
     turn_left/1,
     turn_right/1,
     update_player/1,
+    apply_player_input/1,
+    is_player_moving/1,
     check_food_collisions/2,
     check_poison_collisions/2,
     check_player_collisions/1,
@@ -29,37 +31,40 @@ create_player(Id, {X, Y}) ->
 create_food() ->
     #food{
         id = erlang:unique_integer([monotonic, positive]),
-        x = rand:uniform(?MAP_WIDTH - 25) + 25,
-        y = rand:uniform(?MAP_HEIGHT - 25) + 25,
-        radius = 4 + rand:uniform(21),
-        mass = 9 + rand:uniform(31)
+        x = float(rand:uniform(?MAP_WIDTH - 25) + 25),
+        y = float(rand:uniform(?MAP_HEIGHT - 25) + 25),
+        radius = float(4 + rand:uniform(21)),
+        mass = float(9 + rand:uniform(31))
     }.
 
 % Criar veneno com raio entre 8 e 35 e massa entre 10 e 35
 create_poison() ->
     #poison{
         id = erlang:unique_integer([monotonic, positive]),
-        x = rand:uniform(?MAP_WIDTH - 25) + 25,
-        y = rand:uniform(?MAP_HEIGHT - 25) + 25,
-        radius = 7 + rand:uniform(28),
-        mass = 9 + rand:uniform(26)
+        x = float(rand:uniform(?MAP_WIDTH - 25) + 25),
+        y = float(rand:uniform(?MAP_HEIGHT - 25) + 25),
+        radius = float(7 + rand:uniform(28)),
+        mass = float(9 + rand:uniform(26))
     }.
 
 % Define posições iniciais para 3 ou 4 jogadores,
 % garantindo que estão suficientemente distantes do centro e entre si.
 calculate_spawn_positions(4, _) ->
     [
-        {?MAP_WIDTH div 4, ?MAP_HEIGHT div 4},
-        {3 * ?MAP_WIDTH div 4, ?MAP_HEIGHT div 4},
-        {?MAP_WIDTH div 4, 3 * ?MAP_HEIGHT div 4},
-        {3 * ?MAP_WIDTH div 4, 3 * ?MAP_HEIGHT div 4}
+        {float(?MAP_WIDTH div 4), float(?MAP_HEIGHT div 4)},
+        {float(3 * ?MAP_WIDTH div 4), float(?MAP_HEIGHT div 4)},
+        {float(?MAP_WIDTH div 4), float(3 * ?MAP_HEIGHT div 4)},
+        {float(3 * ?MAP_WIDTH div 4), float(3 * ?MAP_HEIGHT div 4)}
     ];
 calculate_spawn_positions(3, Radius) ->
     Cx = ?MAP_WIDTH / 2,
     Cy = ?MAP_HEIGHT / 2,
     % Ângulos: 0, 120 e 240 graus
     Angles = [0, (2 * math:pi()) / 3, (4 * math:pi()) / 3],
-    [{round(Cx + Radius * math:cos(A)), round(Cy + Radius * math:sin(A))} || A <- Angles].
+    [
+        {float(round(Cx + Radius * math:cos(A))), float(round(Cy + Radius * math:sin(A)))}
+     || A <- Angles
+    ].
 
 % --------------------------------------------------------------------------------------------
 % MOVIMENTOS DO JOGADOR
@@ -96,6 +101,33 @@ turn_right(P) ->
         P#player.angularVelocity + (P#player.torque / P#player.mass), P#player.maxAngularVelocity
     ]),
     P#player{angularVelocity = NewAV}.
+
+apply_player_input(P) ->
+    % Aplicar alterações baseadas no input recebido do jogador
+    P1 =
+        if
+            P#player.moving_up -> game_logic:accelerate_forward(P);
+            true -> P
+        end,
+    P2 =
+        if
+            P#player.moving_left -> game_logic:turn_left(P1);
+            true -> P1
+        end,
+    P3 =
+        if
+            P#player.moving_right -> game_logic:turn_right(P2);
+            true -> P2
+        end,
+    P3.
+
+is_player_moving(P) ->
+    P#player.moving_up orelse
+        P#player.moving_left orelse
+        P#player.moving_right orelse
+        abs(P#player.vx) > 0.0001 orelse
+        abs(P#player.vy) > 0.0001 orelse
+        abs(P#player.angularVelocity) > 0.0001.
 
 % Calcular nova posição e ângulo do jogador e aplicar restrições de limites do mapa
 update_player(P) ->
@@ -165,10 +197,26 @@ respawn_player(P) ->
         moving_right = false
     }.
 
-% Verificar colisões com Foods, atualizar massa do jogador e remover Foods do mapa
-check_food_collisions(P, Foods) ->
+% Verificar colisões de todos os jogadores com Foods
+check_food_collisions(Players, Foods) ->
     maps:fold(
-        fun(Id, Food, {NewP, NewFoods}) ->
+        fun(Pid, Player, {AccPlayers, AccFoods, AccRemovedIDs}) ->
+            % Para cada jogador, verificamos as Foods restantes
+            {NewP, NewFoods, RemovedIDs} = check_single_player_food(Player, AccFoods),
+            {
+                maps:put(Pid, NewP, AccPlayers),
+                NewFoods,
+                RemovedIDs ++ AccRemovedIDs
+            }
+        end,
+        {Players, Foods, []},
+        Players
+    ).
+
+% Verificar colisões com Foods, atualizar massa do jogador, remover Foods do mapa e devolver lista de IDs removidos
+check_single_player_food(P, Foods) ->
+    maps:fold(
+        fun(Id, Food, {NewP, NewFoods, RemovedIDs}) ->
             case
                 check_fully_contains(
                     {P#player.x, P#player.y},
@@ -178,19 +226,36 @@ check_food_collisions(P, Foods) ->
                 )
             of
                 true ->
-                    {player_add_mass(NewP, Food#food.mass), maps:remove(Id, NewFoods)};
+                    {player_add_mass(NewP, Food#food.mass), maps:remove(Id, NewFoods), [
+                        Id | RemovedIDs
+                    ]};
                 false ->
-                    {NewP, NewFoods}
+                    {NewP, NewFoods, RemovedIDs}
             end
         end,
-        {P, Foods},
+        {P, Foods, []},
         Foods
     ).
 
-% Verificar colisões com Poisons, atualizar massa do jogador e remover Poisons do mapa
-check_poison_collisions(P, Poisons) ->
+% Verificar colisões de todos os jogadores com Poisons
+check_poison_collisions(Players, Poisons) ->
     maps:fold(
-        fun(Id, Poison, {NewP, NewPoisons}) ->
+        fun(Pid, Player, {AccPlayers, AccPoisons, AccRemovedIDs}) ->
+            {NewP, NewPoisons, RemovedIDs} = check_single_player_poison(Player, AccPoisons),
+            {
+                maps:put(Pid, NewP, AccPlayers),
+                NewPoisons,
+                RemovedIDs ++ AccRemovedIDs
+            }
+        end,
+        {Players, Poisons, []},
+        Players
+    ).
+
+% Verificar colisões com Poisons, atualizar massa do jogador, remover Poisons do mapa e devolver lista de IDs removidos
+check_single_player_poison(P, Poisons) ->
+    maps:fold(
+        fun(Id, Poison, {NewP, NewPoisons, RemovedIDs}) ->
             case
                 check_overlap(
                     {P#player.x, P#player.y},
@@ -200,12 +265,14 @@ check_poison_collisions(P, Poisons) ->
                 )
             of
                 true ->
-                    {player_add_mass(NewP, -Poison#poison.mass), maps:remove(Id, NewPoisons)};
+                    {player_add_mass(NewP, -Poison#poison.mass), maps:remove(Id, NewPoisons), [
+                        Id | RemovedIDs
+                    ]};
                 false ->
-                    {NewP, NewPoisons}
+                    {NewP, NewPoisons, RemovedIDs}
             end
         end,
-        {P, Poisons},
+        {P, Poisons, []},
         Poisons
     ).
 
@@ -285,13 +352,13 @@ check_smaller_food(Foods, MinRadius) ->
 % Fazer a gestão de Foods no mundo
 manage_world_foods(Foods, MinRadius) ->
     % Garantir número mínimo de foods
-    NewFoods = fill_entities(Foods, ?MIN_FOODS, food),
+    {NewFoods, CreatedEntities} = fill_entities(Foods, ?MIN_FOODS, [], food),
 
     % Garantir que haja pelo menos um alimento menor que o menor jogador
     case check_smaller_food(NewFoods, MinRadius) of
         % Se já existe, manter o Foods atual
         true ->
-            NewFoods;
+            {NewFoods, CreatedEntities};
         % Se não existe, criar um novo com raio menor que o menor jogador
         false ->
             NewFood = create_food(),
@@ -299,27 +366,36 @@ manage_world_foods(Foods, MinRadius) ->
                 NewFood#food.id,
                 NewFood#food{radius = MinRadius - 1.0, mass = math:pow(MinRadius - 1.0, 2)},
                 NewFoods
-            )
+            ),
+            {NewFoods, [{NewFood, food} | CreatedEntities]}
     end.
 
 % Fazer a gestão de Poisons no mundo
 manage_world_poisons(Poisons) ->
     % Garantir número mínimo de venenos
-    fill_entities(Poisons, ?MIN_POISONS, poison).
+    fill_entities(Poisons, ?MIN_POISONS, [], poison).
 
-% Função auxiliar que preenche o mapa até ao N desejado
-fill_entities(Entities, Min, Type) ->
+% Preencher o mapa com Foods ou Poisons até atingir o número mínimo e
+% criar uma lista de entidades criadas para enviar aos clientes
+fill_entities(Entities, Min, CreatedEntities, Type) ->
     CurrentSize = maps:size(Entities),
     case CurrentSize < Min of
         true ->
             case Type of
                 food ->
                     E = create_food(),
-                    fill_entities(maps:put(E#food.id, E, Entities), Min, food);
+                    fill_entities(
+                        maps:put(E#food.id, E, Entities), Min, [{E, food} | CreatedEntities], food
+                    );
                 poison ->
                     E = create_poison(),
-                    fill_entities(maps:put(E#poison.id, E, Entities), Min, poison)
+                    fill_entities(
+                        maps:put(E#poison.id, E, Entities),
+                        Min,
+                        [{E, poison} | CreatedEntities],
+                        poison
+                    )
             end;
         false ->
-            Entities
+            {Entities, CreatedEntities}
     end.
