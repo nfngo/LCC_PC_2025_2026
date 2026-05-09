@@ -47,10 +47,10 @@ user_not_auth(Sock) ->
                     Response = login_manager:create_account(Username, Password),
                     case Response of
                         user_exists ->
-                            gen_tcp:send(Sock, "REGISTER_FAIL,user_exists\n"),
+                            gen_tcp:send(Sock, <<"REGISTER_FAIL,user_exists\n">>),
                             user_not_auth(Sock);
                         ok ->
-                            gen_tcp:send(Sock, "REGISTER_OK\n"),
+                            gen_tcp:send(Sock, <<"REGISTER_OK\n">>),
                             user_not_auth(Sock)
                     end;
                 % LOGIN,username,password
@@ -58,13 +58,13 @@ user_not_auth(Sock) ->
                     Response = login_manager:login(Username, Password),
                     case Response of
                         ok ->
-                            gen_tcp:send(Sock, "LOGIN_OK\n"),
+                            gen_tcp:send(Sock, <<"LOGIN_OK\n">>),
                             user_auth(Sock, Username);
                         user_already_logged_in ->
-                            gen_tcp:send(Sock, "LOGIN_FAIL,user_already_logged_in\n"),
+                            gen_tcp:send(Sock, <<"LOGIN_FAIL,user_already_logged_in\n">>),
                             user_not_auth(Sock);
                         _ ->
-                            gen_tcp:send(Sock, "LOGIN_FAIL,invalid_credentials\n"),
+                            gen_tcp:send(Sock, <<"LOGIN_FAIL,invalid_credentials\n">>),
                             user_not_auth(Sock)
                     end;
                 ["DELETE_ACCOUNT", Username, Password] ->
@@ -72,10 +72,10 @@ user_not_auth(Sock) ->
                     Response = login_manager:close_account(Username, Password),
                     case Response of
                         ok ->
-                            gen_tcp:send(Sock, "DELETE_OK\n"),
+                            gen_tcp:send(Sock, <<"DELETE_OK\n">>),
                             user_not_auth(Sock);
                         invalid ->
-                            gen_tcp:send(Sock, "DELETE_FAIL,invalid_credentials\n"),
+                            gen_tcp:send(Sock, <<"DELETE_FAIL,invalid_credentials\n">>),
                             user_not_auth(Sock)
                     end;
                 _ ->
@@ -89,9 +89,6 @@ user_not_auth(Sock) ->
 
 user_auth(Sock, Username) ->
     receive
-        {line, Data} ->
-            gen_tcp:send(Sock, Data),
-            user_auth(Sock, Username);
         {tcp, _, Data} ->
             Line = string:trim(binary_to_list(Data)),
             case string:split(Line, ",", all) of
@@ -104,12 +101,12 @@ user_auth(Sock, Username) ->
                     user_auth(Sock, Username);
                 ["LOGOUT"] ->
                     login_manager:logout(Username),
-                    gen_tcp:send(Sock, "LOGOUT_OK\n"),
+                    gen_tcp:send(Sock, <<"LOGOUT_OK\n">>),
                     user_not_auth(Sock);
                 ["ONLINE"] ->
                     OnlineUsers = login_manager:online(),
                     Response = lists:foldl(fun(U, Acc) -> Acc ++ U ++ "\n" end, "", OnlineUsers),
-                    gen_tcp:send(Sock, Response),
+                    gen_tcp:send(Sock, list_to_binary(Response)),
                     user_auth(Sock, Username);
                 _ ->
                     gen_tcp:send(Sock, Line),
@@ -128,9 +125,9 @@ waiting_for_game(Sock, Username) ->
 
     % Esperar por feedback do matchmaker
     receive
-        {game_started, GamePid} ->
+        {game_started, GamePid, Data} ->
             io:format("SERVER: Game started for user ~p~n", [Username]),
-            gen_tcp:send(Sock, "GAME_STARTED\n"),
+            gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
         {error, Reason} ->
             {Reason, ok}
@@ -138,13 +135,6 @@ waiting_for_game(Sock, Username) ->
 
 in_game(Sock, Username, GamePid) ->
     receive
-        {game_over, Score} ->
-            io:format("SERVER: Game over for user ~p. Score: ~p~n", [Username, Score]),
-            gen_tcp:send(Sock, io_lib:format("GAME_OVER,~p\n", [Score])),
-            user_auth(Sock, Username);
-        {line, Data} ->
-            gen_tcp:send(Sock, Data),
-            in_game(Sock, Username, GamePid);
         {tcp, _, Data} ->
             Line = string:trim(binary_to_list(Data)),
             % Enviar comandos do jogador para o processo do jogo
@@ -155,6 +145,14 @@ in_game(Sock, Username, GamePid) ->
                 _ ->
                     in_game(Sock, Username, GamePid)
             end;
+        {delta_update, Data} ->
+            gen_tcp:send(Sock, Data),
+            io:format("SERVER: Delta update for user ~p~n", [Username]),
+            in_game(Sock, Username, GamePid);
+        {game_over, Score} ->
+            io:format("SERVER: Game over for user ~p. Score: ~p~n", [Username, Score]),
+            gen_tcp:send(Sock, list_to_binary(io_lib:format("GAME_OVER,~p\n", [Score]))),
+            user_auth(Sock, Username);
         {tcp_closed, _} ->
             ok;
         {tcp_error, _, _} ->
