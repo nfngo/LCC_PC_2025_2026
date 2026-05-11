@@ -1,15 +1,10 @@
 -module(game_logic).
 -export([
-    create_player/2,
+    create_player/3,
     create_food/0,
     create_poison/0,
     calculate_spawn_positions/2,
-    accelerate_forward/1,
-    turn_left/1,
-    turn_right/1,
     update_player/1,
-    apply_player_input/1,
-    is_player_moving/1,
     check_food_collisions/2,
     check_poison_collisions/2,
     check_player_collisions/1,
@@ -24,37 +19,44 @@
 % ENTIDADES
 % --------------------------------------------------------------------------------------------
 % Criar jogador com atributos iniciais
-create_player(Id, {X, Y}) ->
-    #player{id = Id, x = X, y = Y}.
+create_player(Id, {X, Y}, Username) ->
+    #player{id = Id, username = Username, x = X, y = Y}.
 
-% Criar comida com raio entre 5 e 25 e massa entre 10 e 40
+% Criar comida massa entre 5 e 10
 create_food() ->
+    Mass = float(4 + rand:uniform(6)),
+    Radius = math:sqrt(Mass / math:pi()) * 3.0,
+
     #food{
         id = erlang:unique_integer([monotonic, positive]),
-        x = float(rand:uniform(?MAP_WIDTH - 25) + 25),
-        y = float(rand:uniform(?MAP_HEIGHT - 25) + 25),
-        radius = float(4 + rand:uniform(21)),
-        mass = float(9 + rand:uniform(31))
+        x = float(rand:uniform(?MAP_WIDTH - 50) + 25),
+        y = float(rand:uniform(?MAP_HEIGHT - 50) + 25),
+        mass = Mass,
+        radius = Radius
     }.
 
-% Criar veneno com raio entre 8 e 35 e massa entre 10 e 35
+% Criar veneno com massa entre 20 e 30
 create_poison() ->
+    % rand:uniform(11) dá 1 a 11 -> Massa 20 a 30
+    Mass = float(19 + rand:uniform(11)),
+    Radius = math:sqrt(Mass / math:pi()) * 3.0,
+
     #poison{
         id = erlang:unique_integer([monotonic, positive]),
-        x = float(rand:uniform(?MAP_WIDTH - 25) + 25),
-        y = float(rand:uniform(?MAP_HEIGHT - 25) + 25),
-        radius = float(7 + rand:uniform(28)),
-        mass = float(9 + rand:uniform(26))
+        x = float(rand:uniform(?MAP_WIDTH - 50) + 25),
+        y = float(rand:uniform(?MAP_HEIGHT - 50) + 25),
+        mass = Mass,
+        radius = Radius
     }.
 
 % Define posições iniciais para 3 ou 4 jogadores,
 % garantindo que estão suficientemente distantes do centro e entre si.
 calculate_spawn_positions(4, _) ->
     [
-        {float(?MAP_WIDTH div 4), float(?MAP_HEIGHT div 4)},
-        {float(3 * ?MAP_WIDTH div 4), float(?MAP_HEIGHT div 4)},
-        {float(?MAP_WIDTH div 4), float(3 * ?MAP_HEIGHT div 4)},
-        {float(3 * ?MAP_WIDTH div 4), float(3 * ?MAP_HEIGHT div 4)}
+        {?MAP_WIDTH / 4, ?MAP_HEIGHT / 4},
+        {3 * ?MAP_WIDTH / 4, ?MAP_HEIGHT / 4},
+        {?MAP_WIDTH / 4, 3 * ?MAP_HEIGHT / 4},
+        {3 * ?MAP_WIDTH / 4, 3 * ?MAP_HEIGHT / 4}
     ];
 calculate_spawn_positions(3, Radius) ->
     Cx = ?MAP_WIDTH / 2,
@@ -69,81 +71,57 @@ calculate_spawn_positions(3, Radius) ->
 % --------------------------------------------------------------------------------------------
 % MOVIMENTOS DO JOGADOR
 % --------------------------------------------------------------------------------------------
-% Acelerar
-accelerate_forward(P) ->
-    % Calcular nova velocidade com base na força aplicada
-    NewVX = P#player.vx + math:cos(P#player.angle) * (P#player.force / P#player.mass),
-    NewVY = P#player.vy + math:sin(P#player.angle) * (P#player.force / P#player.mass),
+% Calcular nova posição e ângulo do jogador e aplicar restrições de limites do mapa
+update_player(P) ->
+    % Calcular a aceleração angular (Torque)
+    AccAngular =
+        if
+            P#player.moving_left -> -P#player.torque / P#player.mass;
+            P#player.moving_right -> P#player.torque / P#player.mass;
+            true -> 0.0
+        end,
 
-    % Calcular a velocidade atual (Teorema de Pitágoras)
+    % Atualizar velocidade angular
+    NewAV = P#player.angularVelocity + AccAngular,
+
+    % Limitar a velocidade de rotação
+    FinalAV = lists:max([
+        lists:min([NewAV, P#player.maxAngularVelocity]), -P#player.maxAngularVelocity
+    ]),
+
+    % Atualizar ângulo com base na velocidade angular e Normalizar (0 a 2*pi)
+    NewAngle = fmod(P#player.angle + FinalAV, math:pi() * 2),
+
+    AccLinear =
+        if
+            P#player.moving_up -> P#player.force / P#player.mass;
+            true -> 0.0
+        end,
+
+    NewVX = P#player.vx + (math:cos(NewAngle) * AccLinear),
+    NewVY = P#player.vy + (math:sin(NewAngle) * AccLinear),
+
+    % Limitar a velocidade máxima linear
     Speed = math:sqrt(NewVX * NewVX + NewVY * NewVY),
-
-    % Se a velocidade atual exceder a velocidade máxima, normalizar para MaxVelocity
-    {FVX, FVY} =
+    {LimitedVX, LimitedVY} =
         if
             Speed > P#player.maxVelocity ->
-                {(NewVX / Speed) * P#player.maxVelocity, (NewVY / Speed) * P#player.maxVelocity};
+                Ratio = P#player.maxVelocity / Speed,
+                {NewVX * Ratio, NewVY * Ratio};
             true ->
                 {NewVX, NewVY}
         end,
-    P#player{vx = FVX, vy = FVY}.
 
-% Virar/Rodar para a esquerda
-turn_left(P) ->
-    NewAV = lists:max([
-        P#player.angularVelocity - (P#player.torque / P#player.mass), -P#player.maxAngularVelocity
-    ]),
-    P#player{angularVelocity = NewAV}.
-
-% Virar/Rodar para a direita
-turn_right(P) ->
-    NewAV = lists:min([
-        P#player.angularVelocity + (P#player.torque / P#player.mass), P#player.maxAngularVelocity
-    ]),
-    P#player{angularVelocity = NewAV}.
-
-apply_player_input(P) ->
-    % Aplicar alterações baseadas no input recebido do jogador
-    P1 =
-        if
-            P#player.moving_up -> game_logic:accelerate_forward(P);
-            true -> P
-        end,
-    P2 =
-        if
-            P#player.moving_left -> game_logic:turn_left(P1);
-            true -> P1
-        end,
-    P3 =
-        if
-            P#player.moving_right -> game_logic:turn_right(P2);
-            true -> P2
-        end,
-    P3.
-
-is_player_moving(P) ->
-    P#player.moving_up orelse
-        P#player.moving_left orelse
-        P#player.moving_right orelse
-        abs(P#player.vx) > 0.0001 orelse
-        abs(P#player.vy) > 0.0001 orelse
-        abs(P#player.angularVelocity) > 0.0001.
-
-% Calcular nova posição e ângulo do jogador e aplicar restrições de limites do mapa
-update_player(P) ->
     % Atualizar posição com base na velocidade
-    NextX = P#player.x + P#player.vx,
-    NextY = P#player.y + P#player.vy,
-
-    % Atualizar ângulo com base na velocidade angular
-    NextAngle = P#player.angle + P#player.angularVelocity,
+    NewX = P#player.x + LimitedVX,
+    NewY = P#player.y + LimitedVY,
 
     % Aplicamos os limites (Se bater, a velocidade naquele eixo morre)
-    {FinalX, FinalVX} = check_boundaries(NextX, P#player.vx, P#player.radius, ?MAP_WIDTH),
-    {FinalY, FinalVY} = check_boundaries(NextY, P#player.vy, P#player.radius, ?MAP_HEIGHT),
+    {FinalX, FinalVX} = check_boundaries(NewX, LimitedVX, P#player.radius, ?MAP_WIDTH),
+    {FinalY, FinalVY} = check_boundaries(NewY, LimitedVY, P#player.radius, ?MAP_HEIGHT),
 
     % Atualizar jogador
-    P#player{x = FinalX, y = FinalY, vx = FinalVX, vy = FinalVY, angle = NextAngle}.
+    P#player{x = FinalX, y = FinalY, vx = FinalVX, vy = FinalVY, angle = NewAngle}.
 
 % Verificar se o jogador ultrapassa os limites do mapa
 check_boundaries(Pos, Vel, Radius, Max) ->
@@ -151,6 +129,14 @@ check_boundaries(Pos, Vel, Radius, Max) ->
         Pos < Radius -> {Radius, 0.0};
         Pos > (Max - Radius) -> {Max - Radius, 0.0};
         true -> {Pos, Vel}
+    end.
+
+% Função auxiliar para normalizar o ângulo
+fmod(X, Y) ->
+    Res = X - Y * trunc(X / Y),
+    if
+        Res < 0 -> Res + Y;
+        true -> Res
     end.
 % --------------------------------------------------------------------------------------------
 % COLISÕES
@@ -279,29 +265,29 @@ check_single_player_poison(P, Poisons) ->
 % Verificar colisões entre jogadores
 check_player_collisions(Players) ->
     PlayersList = maps:to_list(Players),
-    UpdatedList = collide_players(PlayersList, []),
-    maps:from_list(UpdatedList).
+    {UpdatedList, Hunters} = collide_players(PlayersList, [], []),
+    {maps:from_list(UpdatedList), Hunters}.
 
 % Função auxiliar para verificar colisões entre jogadores de forma recursiva
 % (comparar cada jogador com os seguintes na lista para evitar comparações desnecessárias)
 % Performance: O(N(N-1)/2) vs O(N^2) se comparássemos todos contra todos
 
 % Casos base: lista vazia ou um jogador restante (não há colisões)
-collide_players([], Acc) ->
-    Acc;
-collide_players([LastPlayer], Acc) ->
-    [LastPlayer | Acc];
+collide_players([], Acc, Hunters) ->
+    {Acc, Hunters};
+collide_players([LastPlayer], Acc, Hunters) ->
+    {[LastPlayer | Acc], Hunters};
 % Caso recursivo: comparar o primeiro jogador com todos os outros
-collide_players([{Pid, P1} | Rest], Acc) ->
+collide_players([{Pid, P1} | Rest], Acc, Hunters) ->
     % Verificar colisões entre P1 e os jogadores restantes
-    {NewP1, NewRest} = check_one_vs_others(P1, Rest, []),
+    {NewP1, NewRest, NewHunters} = check_one_vs_others(P1, Rest, [], Hunters),
     % Verificar colsiões entre os jogadores restantes
-    collide_players(NewRest, [{Pid, NewP1} | Acc]).
+    collide_players(NewRest, [{Pid, NewP1} | Acc], NewHunters).
 
 % Verificar colisões entre um jogador e uma lista de outros jogadores
-check_one_vs_others(P1, [], Acc) ->
-    {P1, lists:reverse(Acc)};
-check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc) ->
+check_one_vs_others(P1, [], Acc, Hunters) ->
+    {P1, lists:reverse(Acc), Hunters};
+check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc, Hunters) ->
     % Verificar se P1 come P2
     case
         check_fully_contains(
@@ -313,7 +299,7 @@ check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc) ->
     of
         true when P1#player.mass > P2#player.mass ->
             {NewP1, NewP2} = player_eats_player(P1, P2),
-            check_one_vs_others(NewP1, Rest, [{Pid2, NewP2} | Acc]);
+            check_one_vs_others(NewP1, Rest, [{Pid2, NewP2} | Acc], [P1#player.username | Hunters]);
         % Verificar se P2 come P1
         _ ->
             case
@@ -326,10 +312,12 @@ check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc) ->
             of
                 true when P2#player.mass > P1#player.mass ->
                     {NewP2, NewP1} = player_eats_player(P2, P1),
-                    check_one_vs_others(NewP1, Rest, [{Pid2, NewP2} | Acc]);
+                    check_one_vs_others(NewP1, Rest, [{Pid2, NewP2} | Acc], [
+                        P2#player.username | Hunters
+                    ]);
                 % Sem colisão
                 _ ->
-                    check_one_vs_others(P1, Rest, [{Pid2, P2} | Acc])
+                    check_one_vs_others(P1, Rest, [{Pid2, P2} | Acc], Hunters)
             end
     end.
 
