@@ -4,12 +4,13 @@
 %% Data Type: player
 %% onde:
 %%    id: Identificador único do jogador (default - undefined)
+%%    username: Nome de utilizador do jogador (default - undefined)
 %%    x: Posição atual do jogador no eixo dos X (default - undefined)
 %%    y: Posição atual do jogador no eixo dos Y (default - undefined)
 %%    angle: Ângulo atual do jogador (em radianos) (default - 0.0)
-%%    mass: Massa atual do jogador (default - 200.0)
-%%    minMass: Massa mínima de um jogador (default - 50.0)
-%%    radius: Raio atual do jogador (default - sqrt(mass))
+%%    mass: Massa atual do jogador (default - 150.0)
+%%    minMass: Massa mínima de um jogador (default - 100.0)
+%%    radius: Raio atual do jogador (default - sqrt(mass/PI) * escala (3.0))
 %%    vx: Velocidade atual do jogador na direcção de X (default - 0.0)
 %%    vy: Velocidade atual do jogador na direcção de Y (default - 0.0)
 %%    angularVelocity: Velocidade angular atual do jogador (default is 0.0)
@@ -23,19 +24,20 @@
 %%------------------------------------------------------------
 -record(player, {
     id,
+    username,
     x,
     y,
     angle = 0.0,
-    mass = 200.0,
-    minMass = 50.0,
-    radius = math:sqrt(200.0),
+    mass = 150.0,
+    minMass = 100.0,
+    radius = math:sqrt(150.0 / math:pi()) * 3.0,
     vx = 0.0,
     vy = 0.0,
     angularVelocity = 0.0,
-    maxAngularVelocity = 0.05,
-    maxVelocity = 3.0,
-    force = 4.0,
-    torque = 0.2,
+    maxAngularVelocity = 0.12,
+    maxVelocity = 6.0,
+    force = 18.0,
+    torque = 1.5,
     moving_up = false,
     moving_left = false,
     moving_right = false
