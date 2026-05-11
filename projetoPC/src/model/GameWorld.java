@@ -6,6 +6,7 @@ import entity.*;
 
 import java.util.*;
 
+import static network.MessageParser.parseDelta;
 import static network.MessageParser.parseGameState;
 
 public class GameWorld {
@@ -29,6 +30,10 @@ public class GameWorld {
         if (result.hasSelf()) {
             this.self = result.self();
         }
+    }
+
+    public void applyDelta(String payload) {
+        parseDelta(p, payload, playersMap, objects);
     }
 
     public void update() {

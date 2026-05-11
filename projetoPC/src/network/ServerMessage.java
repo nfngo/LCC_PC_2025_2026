@@ -11,9 +11,11 @@ public class ServerMessage {
         DELETE_OK,
         DELETE_FAIL,
         GAME_OVER,
-        ERROR,
-        SCORE,
+        SCOREBOARD_OK,
+        SCOREBOARD_FAIL,
         STATE,
+        DELTA,
+        ERROR,
         UNKNOWN
     }
 

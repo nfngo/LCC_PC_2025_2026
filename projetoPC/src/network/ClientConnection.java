@@ -68,10 +68,9 @@ public class ClientConnection {
             try {
                 String line;
                 while((line = in.readLine()) != null) {
-                    if (line.startsWith("STATE")) {
+                    if (line.startsWith("STATE") || line.startsWith("DELTA")) {
                         stateLock.lock();
                         try {
-                            stateQueue.clear();
                             stateQueue.add(line);
                         } finally {
                             stateLock.unlock();

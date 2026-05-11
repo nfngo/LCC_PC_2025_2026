@@ -4,8 +4,8 @@ import processing.core.PApplet;
 
 public class Poison extends Avatar {
 
-    public Poison(PApplet p, float x, float y, float r) {
-        super(p, x, y, r, p.color(255,0,0));
+    public Poison(PApplet p, int id, float x, float y, float r, long timestamp) {
+        super(p, id, x, y, r, p.color(255,0,0), timestamp);
     }
 
     @Override

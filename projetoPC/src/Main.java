@@ -19,9 +19,9 @@ public class Main extends PApplet {
 
     //  Serve apenas para definir propriedades do sketch, como:
     //  - tamanho da janela
-    //  - renderizador (2D, 3D)
+    //  - render (2D, 3D)
     public void settings() {
-        size(800, 600);
+        size(1280, 720);
     }
 
     //  - inicializar variáveis
@@ -90,9 +90,14 @@ public class Main extends PApplet {
                         stateManager.setState(GameState.MENU);
                         break;
 
-                    case SCORE:
+                    case SCOREBOARD_OK:
                         stateManager.getScoreboard().updateScores(sm.getPayload());
                         stateManager.setState(GameState.SCOREBOARD);
+                        break;
+
+                    case SCOREBOARD_FAIL:
+                        // Implementar
+                        //stateManager.getScoreboard().onUpdateScoresFail(sm.getPayload());
                         break;
 
                     case ERROR:
@@ -104,13 +109,17 @@ public class Main extends PApplet {
                 }
             }
 
-            // Processar apenas o último estado
-            String stateMsg = connection.poolState();
-            if(stateMsg != null) {
+            String stateMsg;
+            while((stateMsg = connection.poolState()) != null) {
+                System.out.println("SERVER: " + stateMsg);
                 ServerMessage sm = MessageParser.parseMessage(stateMsg);
 
                 if(sm.getType() == ServerMessage.Type.STATE) {
                     stateManager.getWorld().applyState(sm.getPayload());
+                }
+
+                if(sm.getType() == ServerMessage.Type.DELTA) {
+                    stateManager.getWorld().applyDelta(sm.getPayload());
                 }
             }
 

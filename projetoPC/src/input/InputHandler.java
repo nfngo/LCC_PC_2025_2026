@@ -20,7 +20,7 @@ public class InputHandler {
     }
 
     public String serialize() {
-        return (up?1:0) + "," + (left?1:0) + "," + (right?1:0) + "\n";
+        return "INPUT," + (left?1:0) + "," + (up?1:0) + "," + (right?1:0) + "\n";
     }
 
     // Verifica se o input mudou desde a última verificação
