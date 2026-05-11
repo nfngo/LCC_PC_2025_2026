@@ -2,7 +2,15 @@
 -export([build/0]).
 
 build() ->
-    Modules = [game_serialization, game_logic, game_session, matchmaker, login_manager, server],
+    Modules = [
+        game_serialization,
+        game_logic,
+        game_session,
+        matchmaker,
+        scores_manager,
+        login_manager,
+        server
+    ],
     WithInclude = [game_session, game_logic, game_serialization],
 
     lists:foreach(
