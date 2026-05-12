@@ -104,17 +104,8 @@ user_auth(Sock, Username) ->
                     waiting_for_game(Sock, Username);
                 ["SCOREBOARD"] ->
                     io:format("SERVER: User ~p requested the scoreboard~n", [Username]),
-                    % Obter a scoreboard do scores_manager
-                    Response = scores_manager:get_scoreboard(self()),
-                    case Response of
-                        {ok, Top10} ->
-                            % Formatar a resposta para enviar ao cliente
-                            Top10Str = [io_lib:format("~s:~p", [U, S]) || {U, S} <- Top10],
-                            FinalRes = ["SCOREBOARD_OK,", string:join(Top10Str, ";"), "\n"],
-                            gen_tcp:send(Sock, list_to_binary(FinalRes));
-                        {error, timeout} ->
-                            gen_tcp:send(Sock, <<"SCOREBOARD_FAIL,timeout\n">>)
-                    end,
+                    % Obter a scoreboard do scores_manager e enviar
+                    send_scoreboard(Sock),
                     user_auth(Sock, Username);
                 ["LOGOUT"] ->
                     login_manager:logout(Username),
@@ -123,14 +114,15 @@ user_auth(Sock, Username) ->
                 ["ONLINE"] ->
                     io:format("SERVER: User ~p requested the list of online users~n", [Username]),
                     OnlineUsers = login_manager:online(),
-                    Response = lists:foldl(fun(U, Acc) -> Acc ++ U ++ "\n" end, "", OnlineUsers),
-                    gen_tcp:send(Sock, list_to_binary(Response)),
+                    Payload = lists:foldl(fun(U, Acc) -> Acc ++ U ++ "\n" end, "", OnlineUsers),
+                    gen_tcp:send(Sock, list_to_binary(Payload)),
                     user_auth(Sock, Username);
                 _ ->
-                    gen_tcp:send(Sock, Line),
                     user_auth(Sock, Username)
             end;
         {tcp_closed, _} ->
+            io:format("SERVER: User ~p disconnected...~n", [Username]),
+            login_manager:logout(Username),
             ok;
         {tcp_error, _, _} ->
             ok
@@ -141,12 +133,40 @@ waiting_for_game(Sock, Username) ->
     matchmaker:join({self(), Username}),
     io:format("SERVER: User ~p joined the matchmaking queue~n", [Username]),
 
+    % Enviar scoreboard
+    send_scoreboard(Sock),
+
+    % Garantir exibição mínima de 2 segundos antes de aceitar game_started
+    MinDisplayUntil = erlang:system_time(millisecond) + 2000,
+
+    waiting_loop(Sock, Username, MinDisplayUntil).
+
+waiting_loop(Sock, Username, MinDisplayUntil) ->
     % Esperar por feedback do matchmaker
     receive
         {game_started, GamePid, Data} ->
             io:format("SERVER: Game started for user ~p~n", [Username]),
+            % Esperar o tempo mínimo se ainda não passou
+            Now = erlang:system_time(millisecond),
+            case MinDisplayUntil - Now of
+                Delay when Delay > 0 -> timer:sleep(Delay);
+                _ -> ok
+            end,
             gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
+        {waiting_other_players, WPSize} ->
+            io:format("SERVER: ~b waiting players~n", [WPSize]),
+            gen_tcp:send(Sock, <<"WAITING_OTHER_PLAYERS\n">>),
+            waiting_loop(Sock, Username, MinDisplayUntil);
+        {active_games_full, _} ->
+            % Informar o cliente que está à espera por falta de slots
+            gen_tcp:send(Sock, <<"ACTIVE_GAMES_FULL\n">>),
+            waiting_loop(Sock, Username, MinDisplayUntil);
+        {tcp_closed, _} ->
+            % Notificar o matchmaker para remover o jogador da fila
+            matchmaker:leave(self()),
+            login_manager:logout(Username),
+            ok;
         {error, Reason} ->
             {Reason, ok}
     end.
@@ -158,27 +178,37 @@ in_game(Sock, Username, GamePid) ->
             % Enviar comandos do jogador para o processo do jogo
             case string:split(Line, ",", all) of
                 ["INPUT", L, U, R] ->
-                    io:format("SERVER: Received input from user ~p: L=~p, U=~p, R=~p~n", [
-                        Username, L, U, R
-                    ]),
                     GamePid ! {input, self(), {to_bool(L), to_bool(U), to_bool(R)}},
                     in_game(Sock, Username, GamePid);
                 _ ->
                     in_game(Sock, Username, GamePid)
             end;
         {delta_update, Data} ->
-            gen_tcp:send(Sock, Data),
             io:format("SERVER: Sending Delta update for user ~p~n", [Username]),
+            gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
-        {game_over, ScoreboardStr, Result} ->
-            Response = io_lib:format("GAME_OVER,~s,~s\n", [Result, ScoreboardStr]),
-            gen_tcp:send(Sock, list_to_binary(Response)),
+        {game_over, Result, ScoreboardStr} ->
+            Payload = io_lib:format("GAME_OVER,~s,~s\n", [Result, ScoreboardStr]),
+            gen_tcp:send(Sock, list_to_binary(Payload)),
             user_auth(Sock, Username);
         {tcp_closed, _} ->
+            io:format("SERVER: User ~p disconnected...~n", [Username]),
+            login_manager:logout(Username),
             ok;
         {tcp_error, _, _} ->
             ok
     end.
 
+%% Funções auxiliares
 to_bool("1") -> true;
 to_bool(_) -> false.
+
+send_scoreboard(Sock) ->
+    case scores_manager:get_scoreboard(self()) of
+        {ok, Top10} ->
+            Top10Str = [io_lib:format("~s:~p", [U, S]) || {U, S} <- Top10],
+            Msg = ["SCOREBOARD_OK,", string:join(Top10Str, ","), "\n"],
+            gen_tcp:send(Sock, list_to_binary(Msg));
+        {error, timeout} ->
+            gen_tcp:send(Sock, <<"SCOREBOARD_FAIL,timeout\n">>)
+    end.
