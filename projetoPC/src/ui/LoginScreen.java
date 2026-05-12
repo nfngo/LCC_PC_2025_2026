@@ -132,7 +132,14 @@ public class LoginScreen {
     }
 
     public void onLoginFail(String payload) {
-        message = payload;
+        if(payload.equals("invalid_credentials")) {
+            message = "Invalid credentials";
+            return;
+        }
+
+        if(payload.equals("user_already_logged_in")) {
+            message = "User already logged in";
+        }
     }
 
     public void onRegisterSuccess() {
@@ -140,7 +147,9 @@ public class LoginScreen {
     }
 
     public void onRegisterFail(String payload) {
-        message = payload;
+        if(payload.equals("user_exists")) {
+            message = "User already exists";
+        }
     }
 
     public void onLogoutSuccess() {
@@ -155,7 +164,9 @@ public class LoginScreen {
     }
 
     public void onDeleteFail(String payload) {
-        message = payload;
+        if(payload.equals("invalid_credentials")) {
+            message = "Invalid credentials";
+        }
     }
 
     public void onError(String payload) {

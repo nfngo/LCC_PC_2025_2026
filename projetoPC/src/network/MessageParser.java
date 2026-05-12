@@ -18,13 +18,13 @@ public class MessageParser {
             return new ServerMessage(ServerMessage.Type.LOGIN_OK, "");
 
         } else if (msg.startsWith("LOGIN_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.LOGIN_FAIL, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.LOGIN_FAIL, payloadAfterComma(msg));
 
         } else if (msg.startsWith("REGISTER_OK")) {
             return new ServerMessage(ServerMessage.Type.REGISTER_OK, "");
 
         } else if (msg.startsWith("REGISTER_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.REGISTER_FAIL, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.REGISTER_FAIL, payloadAfterComma(msg));
 
         } else if (msg.startsWith("LOGOUT_OK")) {
             return new ServerMessage(ServerMessage.Type.LOGOUT_OK, "");
@@ -33,22 +33,35 @@ public class MessageParser {
             return new ServerMessage(ServerMessage.Type.DELETE_OK, "");
 
         } else if (msg.startsWith("DELETE_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.DELETE_FAIL, msg.substring(msg.indexOf( ",") + 1));
+            return new ServerMessage(ServerMessage.Type.DELETE_FAIL, payloadAfterComma(msg));
+
+        } else if (msg.startsWith("PLAY_OK")) {
+            return new ServerMessage(ServerMessage.Type.PLAY_OK, "");
+
+        } else if (msg.startsWith("WAITING_OTHER_PLAYERS")) {
+            return new ServerMessage(ServerMessage.Type.WAITING_OTHER_PLAYERS, "");
+
+        } else if (msg.startsWith("ACTIVE_GAMES_FULL")) {
+            return new ServerMessage(ServerMessage.Type.ACTIVE_GAMES_FULL, "");
+
+        } else if (msg.startsWith("GAME_START")) {
+            return new ServerMessage(ServerMessage.Type.GAME_START, "");
+
 
         } else if (msg.startsWith("GAME_OVER")) {
-            return new ServerMessage(ServerMessage.Type.GAME_OVER, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.GAME_OVER, payloadAfterComma(msg));
 
         } else if (msg.startsWith("SCOREBOARD_OK")) {
-            return new ServerMessage(ServerMessage.Type.SCOREBOARD_OK, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.SCOREBOARD_OK, payloadAfterComma(msg));
 
         } else if (msg.startsWith("SCOREBOARD_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.SCOREBOARD_FAIL, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.SCOREBOARD_FAIL, payloadAfterComma(msg));
 
         } else if (msg.startsWith("STATE")) {
-            return new ServerMessage(ServerMessage.Type.STATE, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.STATE, payloadAfterComma(msg));
 
         } else if (msg.startsWith("DELTA")) {
-            return new ServerMessage(ServerMessage.Type.DELTA, msg.substring(msg.indexOf(",") + 1));
+            return new ServerMessage(ServerMessage.Type.DELTA, payloadAfterComma(msg));
 
         } else if (msg.startsWith("ERROR")) {
             return new ServerMessage(ServerMessage.Type.ERROR, msg);
@@ -58,12 +71,20 @@ public class MessageParser {
         }
     }
 
+    // Verificar o payload depois da vírgula
+    private static String payloadAfterComma(String msg) {
+        int index = msg.indexOf(",");
+        return index >= 0 && index + 1 < msg.length()
+                ? msg.substring(index + 1)
+                : "";
+    }
+
     // Parse estado do jogo
     public static ParseResult parseGameState(
             PApplet p,
             String payload,
             Map<Integer, Player> playersMap,
-            List<Avatar> objects
+            Map<Integer, Avatar> objects
     ) {
 
         objects.clear();
@@ -100,7 +121,7 @@ public class MessageParser {
                     Player player = playersMap.get(id);
 
                     if (player == null) {
-                        player = new Player(p, id, x, y, r, timestamp, false);
+                        player = new Player(p, id, x, y, r, angle, timestamp, false);
                         playersMap.put(id, player);
                     }
 
@@ -116,8 +137,10 @@ public class MessageParser {
                     break;
                 // Food
                 case "F":
-                    objects.add(new Food(p,
-                            Integer.parseInt(parts[1]),
+                    int foodId = Integer.parseInt(parts[1]);
+
+                    objects.put(foodId, new Food(p,
+                            foodId,
                             Float.parseFloat(parts[2]),
                             Float.parseFloat(parts[3]),
                             Float.parseFloat(parts[4]),
@@ -125,8 +148,10 @@ public class MessageParser {
                     break;
                 // Poison
                 case "X":
-                    objects.add(new Poison(p,
-                            Integer.parseInt(parts[1]),
+                    int poisonId = Integer.parseInt(parts[1]);
+
+                    objects.put(poisonId, new Poison(p,
+                            poisonId,
                             Float.parseFloat(parts[2]),
                             Float.parseFloat(parts[3]),
                             Float.parseFloat(parts[4]),
@@ -138,9 +163,9 @@ public class MessageParser {
     }
 
     public static void parseDelta(PApplet p,
-                                          String payload,
-                                          Map<Integer, Player> playersMap,
-                                          List<Avatar> objects) {
+                                  String payload,
+                                  Map<Integer, Player> playersMap,
+                                  Map<Integer, Avatar> objects) {
 
         String[] tokens = payload.split(";");
         long timestamp = 0L;
@@ -170,8 +195,10 @@ public class MessageParser {
                     break;
                 // Food
                 case "F":
-                    objects.add(new Food(p,
-                            Integer.parseInt(parts[1]),
+                    int foodId = Integer.parseInt(parts[1]);
+
+                    objects.put(foodId, new Food(p,
+                            foodId,
                             Float.parseFloat(parts[2]),
                             Float.parseFloat(parts[3]),
                             Float.parseFloat(parts[4]),
@@ -179,8 +206,10 @@ public class MessageParser {
                     break;
                 // Poison
                 case "X":
-                    objects.add(new Poison(p,
-                            Integer.parseInt(parts[1]),
+                    int poisonId = Integer.parseInt(parts[1]);
+
+                    objects.put(poisonId, new Poison(p,
+                            poisonId,
                             Float.parseFloat(parts[2]),
                             Float.parseFloat(parts[3]),
                             Float.parseFloat(parts[4]),
@@ -188,11 +217,12 @@ public class MessageParser {
                     break;
                 // Remover Foods e Poisons através do ID
                 case "DEL":
+                    Set<Integer> idsToRemove = new HashSet<>();
                     for (int i = 1; i < parts.length; i++) {
-                        int idToRemove = Integer.parseInt(parts[i]);
-                        // Remover lista de objetos
-                        objects.removeIf(obj -> obj.getId() == idToRemove);
+                        idsToRemove.add(Integer.parseInt(parts[i]));
                     }
+                    // Remover lista de objetos
+                    objects.keySet().removeAll(idsToRemove);
                     break;
 
             }

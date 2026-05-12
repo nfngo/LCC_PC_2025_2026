@@ -1,21 +1,21 @@
 package ui;
 
 import processing.core.PApplet;
-import state.*;
-import network.ClientConnection;
+import state.GameState;
+import state.StateManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
 
-public class ScoreboardScreen {
-
+public class WaitingForGameScreen {
     private final PApplet p;
     private final StateManager manager;
 
-    private final ArrayList<String> scores = new ArrayList<>();
-    private String message;
+    private String message = ""; // feedback (erro/sucesso)
 
-    public ScoreboardScreen(PApplet p, StateManager manager) {
+    private final ArrayList<String> scores = new ArrayList<>();
+
+    public WaitingForGameScreen(PApplet p, StateManager manager) {
         this.p = p;
         this.manager = manager;
     }
@@ -25,7 +25,7 @@ public class ScoreboardScreen {
     public void draw() {
         p.fill(0);
         p.textSize(32);
-        p.text("SCOREBOARD", 280, 100);
+        p.text("WAITING ROOM", 280, 100);
 
         p.textSize(16);
         for (int i = 0; i < scores.size(); i++) {
@@ -35,14 +35,13 @@ public class ScoreboardScreen {
         if(!message.isEmpty()) {
             p.text(message, 300, 200);
         }
-
-        p.text("Press M to return", 280, 500);
     }
 
     public void handleKey(char key, int keyCode) {
-        if (key == 'm' || key == 'M') {
-            manager.setState(GameState.MENU);
-        }
+    }
+
+    public void onPlaySuccess() {
+        manager.setState(GameState.WAITING_FOR_GAME);
     }
 
     public void onGetScoreboardSuccess(String payload) {
@@ -51,10 +50,21 @@ public class ScoreboardScreen {
 
         String[] parts = payload.split(",");
         Collections.addAll(scores, parts);
-        manager.setState(GameState.SCOREBOARD);
     }
 
     public void onGetScoreboardFail(String payload) {
         message = payload;
+    }
+
+    public void onWaitingOtherPlayers() {
+        message = "Waiting for other players...";
+    }
+
+    public void onActiveGamesFull() {
+        message = "All game slots are currently occupied. Waiting for a match to finish...";
+    }
+
+    public void onGameStart() {
+        manager.setState(GameState.GAME);
     }
 }

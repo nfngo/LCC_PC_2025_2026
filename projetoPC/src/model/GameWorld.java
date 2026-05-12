@@ -14,14 +14,14 @@ public class GameWorld {
     private final PApplet p;
 
     private final Map<Integer, Player> playersMap;
-    private final List<Avatar> objects;
+    private final Map<Integer, Avatar> objects;
 
     private Player self;
 
     public GameWorld(PApplet p) {
         this.p = p;
         this.playersMap = new HashMap<>();
-        this.objects = new ArrayList<>();
+        this.objects = new HashMap<>();
     }
 
     public void applyState(String payload) {
@@ -41,20 +41,20 @@ public class GameWorld {
             p.update();
         }
 
-        for (Avatar a : objects) {
+        for (Avatar a : objects.values()) {
             a.update();
         }
     }
 
     public void draw() {
+        // objetos
+        for (Avatar a : objects.values()) {
+            a.show();
+        }
+
         // jogadores
         for (Player p : playersMap.values()) {
             p.show();
-        }
-
-        // objetos
-        for (Avatar a : objects) {
-            a.show();
         }
     }
 

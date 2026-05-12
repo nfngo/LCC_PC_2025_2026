@@ -14,18 +14,20 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ClientConnection {
 
     private static final int MAX_EVENT_QUEUE_SIZE = 50;
+    private static final int MAX_WORLD_QUEUE_SIZE = 200;
 
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
 
-    private boolean connected = false;
+    private volatile boolean connected = false;
+//    private volatile boolean worldQueueOverflow = false;
 
-    // Se não for possível utilizar ConcurrentLinkedQueue, utilizamos Queues implementadas com listas ligadas.
     // As listas ligadas permitem adição e remoção de elementos em tempo constante (O(1))
-    // Queue de estados (navegação entre menus)
-    private final Queue<String> stateQueue = new LinkedList<>();
+
     // Queue de eventos de atualização do mundo/jogo
+    private final Queue<String> stateQueue = new LinkedList<>();
+    // Queue de estados (navegação entre menus)
     private final Queue<String> eventQueue = new LinkedList<>();
 
     // Locks para controlo de concorrência
@@ -35,7 +37,9 @@ public class ClientConnection {
 
     public ClientConnection(String host, int port) {
         connect(host, port);
-        startListening();
+        if(connected) {
+            startListening();
+        }
     }
 
     private void connect(String host, int port) {
@@ -71,7 +75,12 @@ public class ClientConnection {
                     if (line.startsWith("STATE") || line.startsWith("DELTA")) {
                         stateLock.lock();
                         try {
-                            stateQueue.add(line);
+                            if (stateQueue.size() >= MAX_WORLD_QUEUE_SIZE) {
+                                stateQueue.clear();
+//                                worldQueueOverflow = true;
+                            } else {
+                                stateQueue.add(line);
+                            }
                         } finally {
                             stateLock.unlock();
                         }
@@ -95,7 +104,7 @@ public class ClientConnection {
     }
 
     // Obter último estado
-    public String poolState() {
+    public String pollState() {
         stateLock.lock();
         try {
             return stateQueue.poll();
@@ -105,7 +114,7 @@ public class ClientConnection {
     }
 
     // Obter último evento
-    public String poolEvent() {
+    public String pollEvent() {
         eventLock.lock();
         try {
             return eventQueue.poll();
@@ -113,6 +122,14 @@ public class ClientConnection {
             eventLock.unlock();
         }
     }
+
+/*    public boolean hasWorldQueueOverflow() {
+        return worldQueueOverflow;
+    }
+
+    public void clearWorldQueueOverflow() {
+        worldQueueOverflow = false;
+    }*/
 
     // Envio de mensagens
     public void send(String msg) {
@@ -144,7 +161,7 @@ public class ClientConnection {
 
     // Estado da ligação
     public boolean isConnected() {
-        return connected && socket != null && socket.isConnected();
+        return connected && socket != null && socket.isConnected() && !socket.isClosed();
     }
 
     // Fechar ligação

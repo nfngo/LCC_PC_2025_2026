@@ -10,8 +10,6 @@ public class MenuScreen {
     private final StateManager manager;
     private final ClientConnection conn;
 
-    private String message = ""; // feedback (erro/sucesso)
-
     public MenuScreen(PApplet p, StateManager manager, ClientConnection conn) {
         this.p = p;
         this.manager = manager;
@@ -34,20 +32,27 @@ public class MenuScreen {
     public void handleKey(char key, int keyCode) {
 
         if (key == '1') {
-            conn.send("PLAY");
-            manager.setState(GameState.GAME);
+            play();
 
         } else if (key == '2') {
-            conn.send("SCORE");
-            manager.setState(GameState.SCOREBOARD);
+            getScoreboard();
 
         } else if (key == '3') {
-            conn.send("LOGOUT");
-
+            logout();
         }
     }
 
     // Implementar métodos de feedback do servidor
-    // onPlaySuccess, onScoreSuccess
+    private void play() {
+        conn.send("PLAY");
+    }
+
+    private void getScoreboard() {
+        conn.send("SCOREBOARD");
+    }
+
+    private void logout() {
+        conn.send("LOGOUT");
+    }
 
 }

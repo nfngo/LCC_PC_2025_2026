@@ -28,6 +28,8 @@ public class Main extends PApplet {
     //  - criar objetos
     //  - definir estilos iniciais
     public void setup() {
+        frameRate(60);
+
         input = new InputHandler();
         connection = new ClientConnection("127.0.0.1", 12345);
         GameWorld world = new GameWorld(this);
@@ -46,12 +48,9 @@ public class Main extends PApplet {
 
             // Processar eventos
             String eventMsg;
-            while ((eventMsg = connection.poolEvent()) != null) {
+            while ((eventMsg = connection.pollEvent()) != null) {
 
                 ServerMessage sm = MessageParser.parseMessage(eventMsg);
-
-                // LOG
-                println("SERVER: " + eventMsg);
 
                 switch (sm.getType()) {
 
@@ -83,6 +82,22 @@ public class Main extends PApplet {
                         stateManager.getLogin().onDeleteFail(sm.getPayload());
                         break;
 
+                    case PLAY_OK:
+                        stateManager.getWaiting().onPlaySuccess();
+                        break;
+
+                    case WAITING_OTHER_PLAYERS:
+                        stateManager.getWaiting().onWaitingOtherPlayers();
+                        break;
+
+                    case ACTIVE_GAMES_FULL:
+                        stateManager.getWaiting().onActiveGamesFull();
+                        break;
+
+                    case GAME_START:
+                        stateManager.getWaiting().onGameStart();
+                        break;
+
                     case GAME_OVER:
                         stateManager.getWorld().onGameOver(sm.getPayload());
                         // Implementar mensagem no Menu ou criar novo screen após jogo terminar
@@ -91,14 +106,24 @@ public class Main extends PApplet {
                         break;
 
                     case SCOREBOARD_OK:
-                        stateManager.getScoreboard().updateScores(sm.getPayload());
-                        stateManager.setState(GameState.SCOREBOARD);
-                        break;
+                        if(stateManager.getState() == GameState.MENU) {
+                            stateManager.getScoreboard().onGetScoreboardSuccess(sm.getPayload());
+                            break;
+                        }
+                        if(stateManager.getState() == GameState.WAITING_FOR_GAME) {
+                            stateManager.getWaiting().onGetScoreboardSuccess(sm.getPayload());
+                            break;
+                        }
 
                     case SCOREBOARD_FAIL:
-                        // Implementar
-                        //stateManager.getScoreboard().onUpdateScoresFail(sm.getPayload());
-                        break;
+                        if(stateManager.getState() == GameState.MENU) {
+                            stateManager.getScoreboard().onGetScoreboardFail(sm.getPayload());
+                            break;
+                        }
+                        if(stateManager.getState() == GameState.WAITING_FOR_GAME) {
+                            stateManager.getWaiting().onGetScoreboardFail(sm.getPayload());
+                            break;
+                        }
 
                     case ERROR:
                         stateManager.getLogin().onError(sm.getPayload());
@@ -109,9 +134,16 @@ public class Main extends PApplet {
                 }
             }
 
+/*            if (connection.hasWorldQueueOverflow()) {
+                connection.clearWorldQueueOverflow();
+                connection.send("REQUEST_STATE");
+            }*/
+
             String stateMsg;
-            while((stateMsg = connection.poolState()) != null) {
-                System.out.println("SERVER: " + stateMsg);
+/*            int processedWorldMessages = 0;
+            int maxWorldMessagesPerFrame = 50;*/
+
+            while((stateMsg = connection.pollState()) != null) {
                 ServerMessage sm = MessageParser.parseMessage(stateMsg);
 
                 if(sm.getType() == ServerMessage.Type.STATE) {
@@ -121,6 +153,8 @@ public class Main extends PApplet {
                 if(sm.getType() == ServerMessage.Type.DELTA) {
                     stateManager.getWorld().applyDelta(sm.getPayload());
                 }
+
+/*                processedWorldMessages++;*/
             }
 
             stateManager.update();
