@@ -14,7 +14,7 @@
 %%    vx: Velocidade atual do jogador na direcção de X (default - 0.0)
 %%    vy: Velocidade atual do jogador na direcção de Y (default - 0.0)
 %%    angularVelocity: Velocidade angular atual do jogador (default is 0.0)
-%%    maxAngularVelocity: Velocidade angular máxima permitida a um jogador (default - 0.05)
+%%    maxAngularVelocity: Velocidade angular máxima permitida a um jogador (default - 0.09)
 %%    maxVelocity: Velocidade linear máxima permitida a um jogador (default - 3.0)
 %%    force: Força atua aplicada ao jogador (default - 4.0)
 %%    torque: Torque atual aplicado ao jogador (default - 0.2)
@@ -34,10 +34,10 @@
     vx = 0.0,
     vy = 0.0,
     angularVelocity = 0.0,
-    maxAngularVelocity = 0.12,
+    maxAngularVelocity = 0.09,
     maxVelocity = 6.0,
-    force = 18.0,
-    torque = 1.5,
+    force = 15.0,
+    torque = 0.5,
     moving_up = false,
     moving_left = false,
     moving_right = false
