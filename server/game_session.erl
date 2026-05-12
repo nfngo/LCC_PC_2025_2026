@@ -182,7 +182,8 @@ check_updated_players(OldPlayers, NewPlayers) ->
             (NewPlayer#player.x /= OldPlayer#player.x) orelse
                 (NewPlayer#player.y /= OldPlayer#player.y) orelse
                 (NewPlayer#player.angle /= OldPlayer#player.angle) orelse
-                (NewPlayer#player.radius /= OldPlayer#player.radius)
+                (NewPlayer#player.radius /= OldPlayer#player.radius) orelse
+                (NewPlayer#player.mass /= OldPlayer#player.mass)
         end,
         NewPlayers
     ).
