@@ -1,7 +1,7 @@
 % O matchmaker é responsável por gerir as partidas ativas e os jogadores que estão à
 % espera de uma partida
 -module(matchmaker).
--export([start/0, stop/0, join/1]).
+-export([start/0, stop/0, join/1, leave/1]).
 
 % loop(Queue de jogadores, número de jogos ativos, referência do timer)
 start() ->
@@ -13,6 +13,9 @@ stop() -> ?MODULE ! stop.
 join(Player) ->
     ?MODULE ! {join, Player}.
 
+leave(PlayerPid) ->
+    ?MODULE ! {leave, PlayerPid}.
+
 % Documentação sobre timers:
 % Creating timers using erlang:send_after/3 and erlang:start_timer/3,
 % is more efficient than using the timers provided by the timer module in STDLIB.
@@ -22,11 +25,12 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
         stop ->
             io:format("MATCHMAKER: Shutting down...~n"),
             ok;
-        {join, Player} ->
-            NewWaitingPlayers = WaitingPlayers ++ [Player],
-            io:format("MATCHMAKER: Player joined. Waiting players: ~p~n", [NewWaitingPlayers]),
+        {join, {PlayerPid, Username}} ->
+            NewWaitingPlayers = WaitingPlayers ++ [{PlayerPid, Username}],
+            WPSize = length(NewWaitingPlayers),
+            io:format("MATCHMAKER: ~p joined. Waiting players: ~p~n", [Username, NewWaitingPlayers]),
             if
-                length(NewWaitingPlayers) =:= 4 andalso ActiveGames < 4 ->
+                WPSize =:= 4 andalso ActiveGames < 4 ->
                     % Se existir um timer ativo, cancelá-lo
                     if
                         TimerRef =/= undefined -> erlang:cancel_timer(TimerRef);
@@ -37,20 +41,32 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
                     game_session:start_game(Players, self()),
                     loop(Rest, ActiveGames + 1, undefined);
                 % Verificar se o timer já existe para evitar criar múltiplos timers desnecessários
-                length(NewWaitingPlayers) =:= 3 andalso ActiveGames < 4 andalso
+                WPSize =:= 3 andalso ActiveGames < 4 andalso
                     TimerRef =:= undefined ->
                     % Se temos 3 jogadores à espera e nenhum timer ativo, criar timer
                     % e enviar mensagem start_game após 10 segundos
                     io:format("MATCHMAKER: 3 players waiting. Starting timer...~n"),
                     TRef = erlang:send_after(10000, self(), start_game),
                     loop(NewWaitingPlayers, ActiveGames, TRef);
+                ActiveGames >= 4 ->
+                    io:format(
+                        "MATCHMAKER: Can't start another game. ~b games already running...~n", [
+                            ActiveGames
+                        ]
+                    ),
+                    PlayerPid ! {active_games_full, ActiveGames},
+                    loop(NewWaitingPlayers, ActiveGames, TimerRef);
                 true ->
                     io:format(
                         "MATCHMAKER: Not enough players to start a game. Waiting players: ~p~n",
                         [NewWaitingPlayers]
                     ),
+                    PlayerPid ! {waiting_other_players, WPSize},
                     loop(NewWaitingPlayers, ActiveGames, TimerRef)
             end;
+        {leave, PlayerPid} ->
+            NewWaitingPlayers = lists:keydelete(PlayerPid, 1, WaitingPlayers),
+            loop(NewWaitingPlayers, ActiveGames, TimerRef);
         start_game ->
             % Verificar novamente se há jogadores suficientes
             case length(WaitingPlayers) >= 3 of
