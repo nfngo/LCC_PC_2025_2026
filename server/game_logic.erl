@@ -73,7 +73,7 @@ calculate_spawn_positions(3, Radius) ->
 % --------------------------------------------------------------------------------------------
 % Calcular nova posição e ângulo do jogador e aplicar restrições de limites do mapa
 update_player(P) ->
-    % Calcular a aceleração angular (Torque)
+    % Calcular a aceleração angular
     AccAngular =
         if
             P#player.moving_left -> -P#player.torque / P#player.mass;
@@ -121,7 +121,14 @@ update_player(P) ->
     {FinalY, FinalVY} = check_boundaries(NewY, LimitedVY, P#player.radius, ?MAP_HEIGHT),
 
     % Atualizar jogador
-    P#player{x = FinalX, y = FinalY, vx = FinalVX, vy = FinalVY, angle = NewAngle}.
+    P#player{
+        x = FinalX,
+        y = FinalY,
+        vx = FinalVX,
+        vy = FinalVY,
+        angle = NewAngle,
+        angularVelocity = FinalAV
+    }.
 
 % Verificar se o jogador ultrapassa os limites do mapa
 check_boundaries(Pos, Vel, Radius, Max) ->
@@ -158,7 +165,7 @@ check_fully_contains({X1, Y1}, {X2, Y2}, Radius1, Radius2) ->
 % Aumentar massa e recalcular raio (raio é proporcional à raiz quadrada da massa)
 player_add_mass(P, Mass) ->
     NewMass = lists:max([P#player.minMass, P#player.mass + Mass]),
-    NewRadius = math:sqrt(NewMass),
+    NewRadius = math:sqrt(NewMass / math:pi()) * 3.0,
     % Atualizar jogador
     P#player{mass = NewMass, radius = NewRadius}.
 
@@ -172,9 +179,10 @@ player_eats_player(Eater, Eaten) ->
 % Jogador faz respawn em posição aleatória do mapa
 % Melhorar para evitar dar spawn em cima de outros jogadores/Foods/Poisons
 respawn_player(P) ->
+    Radius = round(P#player.radius),
     P#player{
-        x = P#player.radius + rand:uniform(?MAP_WIDTH - P#player.radius),
-        y = P#player.radius + rand:uniform(?MAP_HEIGHT - P#player.radius),
+        x = float(Radius + rand:uniform(?MAP_WIDTH - 2 * Radius)),
+        y = float(Radius + rand:uniform(?MAP_HEIGHT - 2 * Radius)),
         vx = 0.0,
         vy = 0.0,
         angle = 0.0,
@@ -350,12 +358,12 @@ manage_world_foods(Foods, MinRadius) ->
         % Se não existe, criar um novo com raio menor que o menor jogador
         false ->
             NewFood = create_food(),
-            maps:put(
+            UpdatedFoods = maps:put(
                 NewFood#food.id,
                 NewFood#food{radius = MinRadius - 1.0, mass = math:pow(MinRadius - 1.0, 2)},
                 NewFoods
             ),
-            {NewFoods, [{NewFood, food} | CreatedEntities]}
+            {UpdatedFoods, [{NewFood, food} | CreatedEntities]}
     end.
 
 % Fazer a gestão de Poisons no mundo

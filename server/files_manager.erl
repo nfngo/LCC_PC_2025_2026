@@ -41,11 +41,11 @@ loop(FileName) ->
                     Data = binary_to_term(Bin),
                     io:format("FILES_MANAGER: ~p loaded successfully~n", [FileName]);
                 {error, enoent} ->
-                    io:format("FILES_MANAGER: ~p not found~n", [FileName]),
-                    Data = #{};
+                    Data = #{},
+                    io:format("FILES_MANAGER: ~p not found~n", [FileName]);
                 {error, Reason} ->
-                    io:format("FILES_MANAGER: Error loading ~p: ~p~n", [FileName, Reason]),
-                    Data = #{}
+                    Data = #{},
+                    io:format("FILES_MANAGER: Error loading ~p: ~p~n", [FileName, Reason])
             end,
             From ! {data, Data},
             loop(FileName)

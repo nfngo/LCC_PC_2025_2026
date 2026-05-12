@@ -30,7 +30,7 @@ serialize_world(Players, Foods, Poisons) ->
 serialize_players(Players) ->
     string:join(
         [
-            io_lib:format("P,~p,~.2f,~.2f,~.2f,~.2f", [
+            io_lib:format("P,~b,~.2f,~.2f,~.2f,~.2f", [
                 P#player.id, P#player.x, P#player.y, P#player.radius, P#player.angle
             ])
          || P <- Players
@@ -42,7 +42,7 @@ serialize_players(Players) ->
 serialize_foods(Foods) ->
     string:join(
         [
-            io_lib:format("F,~p,~.2f,~.2f,~.2f", [
+            io_lib:format("F,~b,~.2f,~.2f,~.2f", [
                 F#food.id, F#food.x, F#food.y, F#food.radius
             ])
          || F <- Foods
@@ -54,7 +54,7 @@ serialize_foods(Foods) ->
 serialize_poisons(Poisons) ->
     string:join(
         [
-            io_lib:format("X,~p,~.2f,~.2f,~.2f", [
+            io_lib:format("X,~b,~.2f,~.2f,~.2f", [
                 P#poison.id, P#poison.x, P#poison.y, P#poison.radius
             ])
          || P <- Poisons
@@ -69,10 +69,10 @@ serialize_created_entities(Entities) ->
     string:join([serialize_created_entity(E) || E <- Entities], ";").
 
 serialize_created_entity({Entity, food}) ->
-    io_lib:format("F,~p,~.2f,~.2f,~.2f", [
+    io_lib:format("F,~b,~.2f,~.2f,~.2f", [
         Entity#food.id, Entity#food.x, Entity#food.y, Entity#food.radius
     ]);
 serialize_created_entity({Entity, poison}) ->
-    io_lib:format("X,~p,~.2f,~.2f,~.2f", [
+    io_lib:format("X,~b,~.2f,~.2f,~.2f", [
         Entity#poison.id, Entity#poison.x, Entity#poison.y, Entity#poison.radius
     ]).
