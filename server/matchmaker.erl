@@ -46,6 +46,7 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
                     % Se temos 3 jogadores à espera e nenhum timer ativo, criar timer
                     % e enviar mensagem start_game após 10 segundos
                     io:format("MATCHMAKER: 3 players waiting. Starting timer...~n"),
+                    PlayerPid ! {waiting_other_players, WPSize},
                     TRef = erlang:send_after(10000, self(), start_game),
                     loop(NewWaitingPlayers, ActiveGames, TRef);
                 ActiveGames >= 4 ->

@@ -159,7 +159,8 @@ waiting_loop(Sock, Username, MinDisplayUntil) ->
             in_game(Sock, Username, GamePid);
         {waiting_other_players, WPSize} ->
             io:format("SERVER: ~b waiting players~n", [WPSize]),
-            gen_tcp:send(Sock, <<"WAITING_OTHER_PLAYERS\n">>),
+            Payload = io_lib:format("WAITING_OTHER_PLAYERS,~b\n", [WPSize]),
+            gen_tcp:send(Sock, list_to_binary(Payload)),
             waiting_loop(Sock, Username, MinDisplayUntil);
         {active_games_full, _} ->
             % Informar o cliente que está à espera por falta de slots
@@ -210,8 +211,8 @@ send_scoreboard(Sock) ->
     case scores_manager:get_scoreboard(self()) of
         {ok, Top10} ->
             Top10Str = [io_lib:format("~s:~p", [U, S]) || {U, S} <- Top10],
-            Msg = ["SCOREBOARD_OK,", string:join(Top10Str, ","), "\n"],
-            gen_tcp:send(Sock, list_to_binary(Msg));
+            Payload = ["SCOREBOARD_OK,", string:join(Top10Str, ","), "\n"],
+            gen_tcp:send(Sock, list_to_binary(Payload));
         {error, timeout} ->
             gen_tcp:send(Sock, <<"SCOREBOARD_FAIL,timeout\n">>)
     end.

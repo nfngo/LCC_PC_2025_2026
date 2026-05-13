@@ -9,6 +9,7 @@ build() ->
         matchmaker,
         scores_manager,
         login_manager,
+        files_manager,
         server
     ],
     WithInclude = [game_session, game_logic, game_serialization],
