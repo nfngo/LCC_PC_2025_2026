@@ -228,4 +228,12 @@ public class MessageParser {
             }
         }
     }
+
+    public static void parseScoreboard(String payload, Map<Integer, ParseScore> scores) {
+        String[] parts = payload.split(",");
+        for(int i = 0; i < parts.length; i++) {
+            String[] scoreParts = parts[i].split(":");
+            scores.put(i+1, new ParseScore(scoreParts[0], Integer.parseInt(scoreParts[1])));
+        }
+    }
 }

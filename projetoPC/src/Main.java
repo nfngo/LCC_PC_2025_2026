@@ -3,6 +3,7 @@ import network.ServerMessage;
 import processing.core.PApplet;
 import input.InputHandler;
 import network.ClientConnection;
+import processing.core.PFont;
 import state.GameState;
 import state.StateManager;
 import model.GameWorld;
@@ -12,6 +13,7 @@ public class Main extends PApplet {
     private InputHandler input;
     private ClientConnection connection;
     private StateManager stateManager;
+    private PFont f;
 
     public static void main(String[] args) {
         PApplet.main("Main");
@@ -34,10 +36,13 @@ public class Main extends PApplet {
         connection = new ClientConnection("127.0.0.1", 12345);
         GameWorld world = new GameWorld(this);
         stateManager = new StateManager(this, world, connection);
+
+        f = createFont("Arial",16,true);
     }
 
     public void draw() {
         background(240);
+        textFont(f);
 
         if (connection.isConnected()) {
 

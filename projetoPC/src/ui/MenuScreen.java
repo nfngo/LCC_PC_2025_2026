@@ -19,14 +19,40 @@ public class MenuScreen {
     public void update() {}
 
     public void draw() {
-        p.fill(0);
-        p.textSize(32);
-        p.text("MENU", 340, 100);
+        float startingX = ((float) p.width - 600)/2;
+        float startingY = ((float) p.height - 500)/2;
 
+        float centerX = (float) p.width / 2;
+
+        // Caixa do menu
+        p.fill(240);
+        p.stroke(0);
+        p.strokeWeight(4);
+        p.rect(startingX, startingY, 600, 500);
+
+        // Título
+        // Cor: preto
+        p.fill(0);
+        p.textSize(40);
+        // Alinhamento: centro, acima da posição onde começa
+        p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
+        p.text("MAIN MENU", centerX, startingY + 100);
+
+        p.textSize(28);
+        p.textAlign(PApplet.CENTER);
+        p.text("1 - PLAY", centerX, startingY + 200);
+        p.text("2 - SCOREBOARD", centerX, startingY + 260);
+        p.fill(220, 0 , 0);
+        p.text("3 - LOGOUT", centerX, startingY + 320);
+
+        // Linha divisória
+        p.fill(0);
+        p.line(startingX + 50, startingY + 440, startingX + 550, startingY + 440);
+
+        // Rodapé
         p.textSize(18);
-        p.text("1 - Play", 300, 200);
-        p.text("2 - Scoreboard", 300, 240);
-        p.text("3 - Logout", 300, 280);
+        p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
+        p.text("[UP/DOWN] NAVIGATE | [ENTER] SELECT", centerX, startingY + 480);
     }
 
     public void handleKey(char key, int keyCode) {

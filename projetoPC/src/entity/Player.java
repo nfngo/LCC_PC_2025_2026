@@ -34,6 +34,7 @@ public class Player extends Avatar {
     public void show() {
         super.show();
 
+        p.strokeWeight(1);
         p.stroke(isSelf ? p.color(0,0,255) : p.color(255,0,0));
         p.noFill();
         p.circle(x, y, radius * 2);
