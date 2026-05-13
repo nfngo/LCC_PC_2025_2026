@@ -10,3 +10,7 @@
 % Número mínimo de Foods e Poisons no mapa
 -define(MIN_FOODS, 6).
 -define(MIN_POISONS, 8).
+% Fator para cálculo de distância de segurança no respawn de jogador
+-define(RESPAWN_SAFETY_RADIUS_FACTOR, 5.0).
+% Número máximo de tentativas de respawn de jogador
+-define(RESPAWN_MAX_ATTEMPTS, 50).
