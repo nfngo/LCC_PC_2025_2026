@@ -33,7 +33,7 @@ public class ScoreboardScreen {
         }
 
         if(!message.isEmpty()) {
-            p.text(message, 300, 200);
+            p.text(message, 300, 180);
         }
 
         p.text("Press M to return", 280, 500);

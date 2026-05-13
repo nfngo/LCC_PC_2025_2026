@@ -33,7 +33,7 @@ public class WaitingForGameScreen {
         }
 
         if(!message.isEmpty()) {
-            p.text(message, 300, 200);
+            p.text(message, 300, 180);
         }
     }
 

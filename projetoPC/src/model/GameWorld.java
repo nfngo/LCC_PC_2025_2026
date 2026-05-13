@@ -3,6 +3,7 @@ package model;
 import network.ParseResult;
 import processing.core.PApplet;
 import entity.*;
+import processing.core.PConstants;
 
 import java.util.*;
 
@@ -52,10 +53,15 @@ public class GameWorld {
             a.show();
         }
 
-        // jogadores
+        // Jogadores
         for (Player p : playersMap.values()) {
-            p.show();
+            if(p != self) p.show();
         }
+
+        // Desenhar self em último para ficar "por cima"
+        self.show();
+
+        drawHUD();
     }
 
     public void reset() {
@@ -75,6 +81,22 @@ public class GameWorld {
         }
 
         reset();
+    }
+
+    void drawHUD() {
+        p.fill(0);
+        p.textSize(14);
+        p.textAlign(PConstants.LEFT);
+
+        // Exemplo - implementar?
+        p.text("Scores:", 10, 30);
+        p.text("P1 - Nuno: 2", 10, 45);
+        p.text("P2 - José: 1", 10, 60);
+        p.text("P3 - Carla: 0", 10, 75);
+
+        p.text("Controls:", 10, p.height - 60);
+        p.text("UP - Move", 10, p.height - 45);
+        p.text("LEFT/RIGHT - Rotate", 10, p.height - 30);
     }
 
     public Player getSelf() {
