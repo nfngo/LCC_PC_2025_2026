@@ -101,6 +101,7 @@ user_auth(Sock, Username) ->
             case string:split(Line, ",", all) of
                 ["PLAY"] ->
                     io:format("SERVER: User ~p wants to play~n", [Username]),
+                    gen_tcp:send(Sock, <<"PLAY_OK\n">>),
                     waiting_for_game(Sock, Username);
                 ["SCOREBOARD"] ->
                     io:format("SERVER: User ~p requested the scoreboard~n", [Username]),
@@ -152,6 +153,8 @@ waiting_loop(Sock, Username, MinDisplayUntil) ->
                 Delay when Delay > 0 -> timer:sleep(Delay);
                 _ -> ok
             end,
+            %% Envio de mensagem separada para garantir mudança de screen no client
+            gen_tcp:send(Sock, <<"GAME_START\n">>),
             gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
         {waiting_other_players, WPSize} ->

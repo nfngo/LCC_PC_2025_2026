@@ -71,7 +71,6 @@ loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
                     },
                     % Guardar no mapa e continuar o loop
                     NewPlayers = maps:put(PlayerPid, NewPlayer, Players),
-                    io:format("GAME_SESSION: updated player ~p~n", [NewPlayer#player.username]),
                     loop(NewPlayers, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef);
                 error ->
                     loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef)
@@ -94,12 +93,8 @@ loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
                         NewPlayers, Foods, Poisons
                     ),
 
-                    io:format("GAME_SESSION: Final players:\n ~p~n", [FinalPlayers]),
-
                     % Verificar quais jogadores foram atualizados
                     UpdatedPlayers = check_updated_players(Players, FinalPlayers),
-
-                    io:format("GAME_SESSION: Updated players:\n ~p~n", [UpdatedPlayers]),
 
                     % Atualizar pontuações dos jogadores que comeram outros jogadores
                     NewGameScores = lists:foldl(
@@ -127,7 +122,7 @@ loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
                             ok;
                         _ ->
                             TimeStamp = erlang:system_time(millisecond),
-                            % Enviamos apenas os jogadores que se mexeram (PlayersMoving)
+                            % Enviar apenas os jogadores que foram atualizados (UpdatedPlayers)
                             % Enviar alterações/delta para todos os jogadores
                             send_changes_to_players(
                                 FinalPlayers, UpdatedPlayers, CreatedEntities, RemovedIDs, TimeStamp
@@ -170,7 +165,7 @@ check_collisions(Players, Foods, Poisons) ->
     ),
 
     % Verificar colisões entre jogadores
-    {FinalPlayers, Hunters} = game_logic:check_player_collisions(UpdatedPlayers2),
+    {FinalPlayers, Hunters} = game_logic:check_player_collisions(UpdatedPlayers2, Foods, Poisons),
 
     {FinalPlayers, Hunters, RemainingFoods, RemainingPoisons, RemovedFoodIDs ++ RemovedPoisonIDs}.
 
@@ -230,7 +225,7 @@ notify_players_game_over(Players, SortedScores, Result) ->
     % Criar texto com resultados para enviar aos jogadores
     ScoreboardStr = string:join(
         [io_lib:format("~s:~p", [U, S]) || {U, S} <- SortedScores],
-        ";"
+        ","
     ),
 
     % Enviar a mensagem de game over para cada jogador,

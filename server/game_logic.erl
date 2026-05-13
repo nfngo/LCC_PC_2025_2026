@@ -7,7 +7,7 @@
     update_player/1,
     check_food_collisions/2,
     check_poison_collisions/2,
-    check_player_collisions/1,
+    check_player_collisions/3,
     get_min_player_radius/1,
     manage_world_foods/2,
     manage_world_poisons/1
@@ -48,6 +48,18 @@ create_poison() ->
         mass = Mass,
         radius = Radius
     }.
+
+% Extrair {X, Y, Radius} de qualquer entidade (food ou poison).
+entity_geometry(#food{x = X, y = Y, radius = R}) -> {X, Y, R};
+entity_geometry(#poison{x = X, y = Y, radius = R}) -> {X, Y, R}.
+
+% Extrai a massa de qualquer entidade
+entity_mass(#food{mass = M}) -> M;
+entity_mass(#poison{mass = M}) -> M.
+
+% Extrair o Id de qualquer entidade
+entity_id(#food{id = Id}) -> Id;
+entity_id(#poison{id = Id}) -> Id.
 
 % Define posições iniciais para 3 ou 4 jogadores,
 % garantindo que estão suficientemente distantes do centro e entre si.
@@ -170,110 +182,148 @@ player_add_mass(P, Mass) ->
     P#player{mass = NewMass, radius = NewRadius}.
 
 % Jogador "come" outro jogador - rouba 25% da massa do outro jogador
-player_eats_player(Eater, Eaten) ->
+player_eats_player(Eater, Eaten, Players, Foods, Poison) ->
     StolenMass = Eaten#player.mass * 0.25,
     NewEater = player_add_mass(Eater, StolenMass),
     NewEaten = player_add_mass(Eaten, -StolenMass),
-    {NewEater, respawn_player(NewEaten)}.
+    {NewEater, respawn_player(NewEaten, Players, Foods, Poison)}.
 
 % Jogador faz respawn em posição aleatória do mapa
-% Melhorar para evitar dar spawn em cima de outros jogadores/Foods/Poisons
-respawn_player(P) ->
+% de maneira a evitar dar spawn em cima de outros jogadores/Foods/Poisons
+respawn_player(P, Players, Foods, Poisons) ->
     Radius = round(P#player.radius),
+    find_safe_position(P, Players, Foods, Poisons, Radius, ?RESPAWN_MAX_ATTEMPTS).
+
+% Procurar coordenadas "seguras" para dar respawn ao jogador
+% Esgotámos as tentativas — nascer no centro como fallback.
+find_safe_position(P, _, _, _, _, 0) ->
     P#player{
-        x = float(Radius + rand:uniform(?MAP_WIDTH - 2 * Radius)),
-        y = float(Radius + rand:uniform(?MAP_HEIGHT - 2 * Radius)),
+        x = ?MAP_WIDTH / 2.0,
+        y = ?MAP_HEIGHT / 2.0,
         vx = 0.0,
         vy = 0.0,
-        angle = 0.0,
-        moving_up = false,
-        moving_left = false,
-        moving_right = false
-    }.
+        angularVelocity = 0.0
+    };
+find_safe_position(P, Players, Foods, Poisons, Radius, Attempts) ->
+    % Gerar posição candidata dentro dos limites do mapa
+    RInt = max(1, round(Radius)),
+    % Valores candidatos
+    CandX = float(RInt + rand:uniform(?MAP_WIDTH - 2 * RInt)),
+    CandY = float(RInt + rand:uniform(?MAP_HEIGHT - 2 * RInt)),
 
-% Verificar colisões de todos os jogadores com Foods
-check_food_collisions(Players, Foods) ->
+    case is_position_safe(CandX, CandY, Radius, Players, Foods, Poisons, P#player.id) of
+        true ->
+            P#player{
+                x = CandX,
+                y = CandY,
+                vx = 0.0,
+                vy = 0.0,
+                angularVelocity = 0.0
+            };
+        false ->
+            find_safe_position(P, Players, Foods, Poisons, Radius, Attempts - 1)
+    end.
+
+is_position_safe(X, Y, Radius, Players, Foods, Poisons, SelfId) ->
+    not overlaps_any_player(X, Y, Radius, maps:values(Players), SelfId) andalso
+        not overlaps_any_entity(X, Y, Radius, maps:values(Foods)) andalso
+        not overlaps_any_entity(X, Y, Radius, maps:values(Poisons)).
+
+overlaps_any_player(_, _, _, [], _) ->
+    false;
+overlaps_any_player(X, Y, Radius, [P | Rest], SelfId) ->
+    case P#player.id =:= SelfId of
+        true ->
+            overlaps_any_player(X, Y, Radius, Rest, SelfId);
+        false ->
+            %% Raio de segurança alargado: evitar nascer perto de outro jogador.
+            %% Passamos SafeRadius em vez de R para alargar a zona de segurança.
+            SafeRadius = Radius * ?RESPAWN_SAFETY_RADIUS_FACTOR,
+            case check_overlap({X, Y}, {P#player.x, P#player.y}, SafeRadius, P#player.radius) of
+                true -> true;
+                false -> overlaps_any_player(X, Y, Radius, Rest, SelfId)
+            end
+    end.
+
+% Verificar se jogador nasce em cima de alguma entidade (Foods/Poisons)
+overlaps_any_entity(_, _, _, []) ->
+    false;
+overlaps_any_entity(X, Y, Radius, [Entity | Rest]) ->
+    {EntityX, EntityY, EntityRadius} = entity_geometry(Entity),
+    case check_overlap({X, Y}, {EntityX, EntityY}, Radius, EntityRadius) of
+        true -> true;
+        false -> overlaps_any_entity(X, Y, Radius, Rest)
+    end.
+
+% Unifica check_food_collisions e check_poison_collisions.
+% Verificar colisões de todos os jogadores com Foods ou Poisons
+% CollisionFun: função que decide se há colisão dado (PlayerPos, EntityPos, PlayerR, EntityR)
+% MassFun: função que calcula a variação de massa dada a entidade
+check_entity_collisions(Players, Entities, CollisionFun, MassFun) ->
     maps:fold(
-        fun(Pid, Player, {AccPlayers, AccFoods, AccRemovedIDs}) ->
-            % Para cada jogador, verificamos as Foods restantes
-            {NewP, NewFoods, RemovedIDs} = check_single_player_food(Player, AccFoods),
+        fun(Pid, Player, {AccPlayers, AccEntities, AccRemovedIDs}) ->
+            % Para cada jogador, verificamos as entidades (Foods ou Poisons) restantes
+            {NewP, NewEntities, RemovedIDs} =
+                check_single_player_entities(Player, AccEntities, CollisionFun, MassFun),
             {
                 maps:put(Pid, NewP, AccPlayers),
-                NewFoods,
+                NewEntities,
                 RemovedIDs ++ AccRemovedIDs
             }
         end,
-        {Players, Foods, []},
+        {Players, Entities, []},
         Players
     ).
 
-% Verificar colisões com Foods, atualizar massa do jogador, remover Foods do mapa e devolver lista de IDs removidos
-check_single_player_food(P, Foods) ->
+% Verificar colisões com Entidades, atualizar massa do jogador,
+% remover Entidades do mapa e devolver lista de IDs removidos
+check_single_player_entities(P, Entities, CollisionFun, MassFun) ->
+    PlayerPos = {P#player.x, P#player.y},
     maps:fold(
-        fun(Id, Food, {NewP, NewFoods, RemovedIDs}) ->
-            case
-                check_fully_contains(
-                    {P#player.x, P#player.y},
-                    {Food#food.x, Food#food.y},
-                    P#player.radius,
-                    Food#food.radius
-                )
-            of
+        fun(Id, Entity, {NewP, NewEntities, RemovedIDs}) ->
+            {EntityX, EntityY, EntityR} = entity_geometry(Entity),
+            case CollisionFun(PlayerPos, {EntityX, EntityY}, NewP#player.radius, EntityR) of
                 true ->
-                    {player_add_mass(NewP, Food#food.mass), maps:remove(Id, NewFoods), [
-                        Id | RemovedIDs
-                    ]};
+                    MassDelta = MassFun(Entity),
+                    {
+                        player_add_mass(NewP, MassDelta),
+                        maps:remove(Id, NewEntities),
+                        [Id | RemovedIDs]
+                    };
                 false ->
-                    {NewP, NewFoods, RemovedIDs}
+                    {NewP, NewEntities, RemovedIDs}
             end
         end,
-        {P, Foods, []},
-        Foods
+        {P, Entities, []},
+        Entities
+    ).
+
+% Verificar colisões de todos os jogadores com Foods
+check_food_collisions(Players, Foods) ->
+    check_entity_collisions(
+        Players,
+        Foods,
+        % food é capturado quando completamente contido
+        fun check_fully_contains/4,
+        % ganha a massa do food
+        fun entity_mass/1
     ).
 
 % Verificar colisões de todos os jogadores com Poisons
 check_poison_collisions(Players, Poisons) ->
-    maps:fold(
-        fun(Pid, Player, {AccPlayers, AccPoisons, AccRemovedIDs}) ->
-            {NewP, NewPoisons, RemovedIDs} = check_single_player_poison(Player, AccPoisons),
-            {
-                maps:put(Pid, NewP, AccPlayers),
-                NewPoisons,
-                RemovedIDs ++ AccRemovedIDs
-            }
-        end,
-        {Players, Poisons, []},
-        Players
-    ).
-
-% Verificar colisões com Poisons, atualizar massa do jogador, remover Poisons do mapa e devolver lista de IDs removidos
-check_single_player_poison(P, Poisons) ->
-    maps:fold(
-        fun(Id, Poison, {NewP, NewPoisons, RemovedIDs}) ->
-            case
-                check_overlap(
-                    {P#player.x, P#player.y},
-                    {Poison#poison.x, Poison#poison.y},
-                    P#player.radius,
-                    Poison#poison.radius
-                )
-            of
-                true ->
-                    {player_add_mass(NewP, -Poison#poison.mass), maps:remove(Id, NewPoisons), [
-                        Id | RemovedIDs
-                    ]};
-                false ->
-                    {NewP, NewPoisons, RemovedIDs}
-            end
-        end,
-        {P, Poisons, []},
-        Poisons
+    check_entity_collisions(
+        Players,
+        Poisons,
+        % poison actua com qualquer sobreposição
+        fun check_overlap/4,
+        % perde a massa do poison
+        fun(Entity) -> -entity_mass(Entity) end
     ).
 
 % Verificar colisões entre jogadores
-check_player_collisions(Players) ->
+check_player_collisions(Players, Foods, Poisons) ->
     PlayersList = maps:to_list(Players),
-    {UpdatedList, Hunters} = collide_players(PlayersList, [], []),
+    {UpdatedList, Hunters} = collide_players(PlayersList, [], [], Players, Foods, Poisons),
     {maps:from_list(UpdatedList), Hunters}.
 
 % Função auxiliar para verificar colisões entre jogadores de forma recursiva
@@ -281,21 +331,23 @@ check_player_collisions(Players) ->
 % Performance: O(N(N-1)/2) vs O(N^2) se comparássemos todos contra todos
 
 % Casos base: lista vazia ou um jogador restante (não há colisões)
-collide_players([], Acc, Hunters) ->
+collide_players([], Acc, Hunters, _, _, _) ->
     {Acc, Hunters};
-collide_players([LastPlayer], Acc, Hunters) ->
+collide_players([LastPlayer], Acc, Hunters, _, _, _) ->
     {[LastPlayer | Acc], Hunters};
 % Caso recursivo: comparar o primeiro jogador com todos os outros
-collide_players([{Pid, P1} | Rest], Acc, Hunters) ->
+collide_players([{Pid, P1} | Rest], Acc, Hunters, Players, Foods, Poisons) ->
     % Verificar colisões entre P1 e os jogadores restantes
-    {NewP1, NewRest, NewHunters} = check_one_vs_others(P1, Rest, [], Hunters),
+    {NewP1, NewRest, NewHunters} = check_one_vs_others(
+        P1, Rest, [], Hunters, Players, Foods, Poisons
+    ),
     % Verificar colsiões entre os jogadores restantes
-    collide_players(NewRest, [{Pid, NewP1} | Acc], NewHunters).
+    collide_players(NewRest, [{Pid, NewP1} | Acc], NewHunters, Players, Foods, Poisons).
 
 % Verificar colisões entre um jogador e uma lista de outros jogadores
-check_one_vs_others(P1, [], Acc, Hunters) ->
+check_one_vs_others(P1, [], Acc, Hunters, _, _, _) ->
     {P1, lists:reverse(Acc), Hunters};
-check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc, Hunters) ->
+check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc, Hunters, Players, Foods, Poisons) ->
     % Verificar se P1 come P2
     case
         check_fully_contains(
@@ -306,8 +358,16 @@ check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc, Hunters) ->
         )
     of
         true when P1#player.mass > P2#player.mass ->
-            {NewP1, NewP2} = player_eats_player(P1, P2),
-            check_one_vs_others(NewP1, Rest, [{Pid2, NewP2} | Acc], [P1#player.username | Hunters]);
+            {NewP1, NewP2} = player_eats_player(P1, P2, Players, Foods, Poisons),
+            check_one_vs_others(
+                NewP1,
+                Rest,
+                [{Pid2, NewP2} | Acc],
+                [P1#player.username | Hunters],
+                Players,
+                Foods,
+                Poisons
+            );
         % Verificar se P2 come P1
         _ ->
             case
@@ -319,13 +379,23 @@ check_one_vs_others(P1, [{Pid2, P2} | Rest], Acc, Hunters) ->
                 )
             of
                 true when P2#player.mass > P1#player.mass ->
-                    {NewP2, NewP1} = player_eats_player(P2, P1),
-                    check_one_vs_others(NewP1, Rest, [{Pid2, NewP2} | Acc], [
-                        P2#player.username | Hunters
-                    ]);
+                    {NewP2, NewP1} = player_eats_player(P2, P1, Players, Foods, Poisons),
+                    check_one_vs_others(
+                        NewP1,
+                        Rest,
+                        [{Pid2, NewP2} | Acc],
+                        [
+                            P2#player.username | Hunters
+                        ],
+                        Players,
+                        Foods,
+                        Poisons
+                    );
                 % Sem colisão
                 _ ->
-                    check_one_vs_others(P1, Rest, [{Pid2, P2} | Acc], Hunters)
+                    check_one_vs_others(
+                        P1, Rest, [{Pid2, P2} | Acc], Hunters, Players, Foods, Poisons
+                    )
             end
     end.
 
@@ -348,7 +418,9 @@ check_smaller_food(Foods, MinRadius) ->
 % Fazer a gestão de Foods no mundo
 manage_world_foods(Foods, MinRadius) ->
     % Garantir número mínimo de foods
-    {NewFoods, CreatedEntities} = fill_entities(Foods, ?MIN_FOODS, [], food),
+    {NewFoods, CreatedEntities} = fill_entities(Foods, ?MIN_FOODS, [], fun() ->
+        {create_food(), food}
+    end),
 
     % Garantir que haja pelo menos um alimento menor que o menor jogador
     case check_smaller_food(NewFoods, MinRadius) of
@@ -369,29 +441,20 @@ manage_world_foods(Foods, MinRadius) ->
 % Fazer a gestão de Poisons no mundo
 manage_world_poisons(Poisons) ->
     % Garantir número mínimo de venenos
-    fill_entities(Poisons, ?MIN_POISONS, [], poison).
+    fill_entities(Poisons, ?MIN_POISONS, [], fun() -> {create_poison(), poison} end).
 
 % Preencher o mapa com Foods ou Poisons até atingir o número mínimo e
 % criar uma lista de entidades criadas para enviar aos clientes
-fill_entities(Entities, Min, CreatedEntities, Type) ->
-    CurrentSize = maps:size(Entities),
-    case CurrentSize < Min of
+fill_entities(Entities, Min, CreatedEntities, CreateFun) ->
+    case maps:size(Entities) < Min of
         true ->
-            case Type of
-                food ->
-                    E = create_food(),
-                    fill_entities(
-                        maps:put(E#food.id, E, Entities), Min, [{E, food} | CreatedEntities], food
-                    );
-                poison ->
-                    E = create_poison(),
-                    fill_entities(
-                        maps:put(E#poison.id, E, Entities),
-                        Min,
-                        [{E, poison} | CreatedEntities],
-                        poison
-                    )
-            end;
+            {E, Type} = CreateFun(),
+            fill_entities(
+                maps:put(entity_id(E), E, Entities),
+                Min,
+                [{E, Type} | CreatedEntities],
+                CreateFun
+            );
         false ->
             {Entities, CreatedEntities}
     end.
