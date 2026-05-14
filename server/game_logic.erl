@@ -3,14 +3,18 @@
     create_player/3,
     create_food/0,
     create_poison/0,
+    entity_id/1,
     calculate_spawn_positions/2,
+    create_food_safe/1,
+    create_poison_safe/1,
     update_player/1,
     check_food_collisions/2,
     check_poison_collisions/2,
     check_player_collisions/3,
     get_min_player_radius/1,
     manage_world_foods/2,
-    manage_world_poisons/1
+    manage_world_poisons/1,
+    fill_entities_safe/4
 ]).
 -include("game_entities.hrl").
 -include("game_constants.hrl").
@@ -22,9 +26,10 @@
 create_player(Id, {X, Y}, Username) ->
     #player{id = Id, username = Username, x = X, y = Y}.
 
-% Criar comida massa entre 5 e 10
+% Criar comida massa entre 25 e 125
 create_food() ->
-    Mass = float(4 + rand:uniform(6)),
+    % x = rand:uniform(N) dá 1 <= x <= N
+    Mass = float(24 + rand:uniform(101)),
     Radius = math:sqrt(Mass / math:pi()) * 3.0,
 
     #food{
@@ -35,10 +40,9 @@ create_food() ->
         radius = Radius
     }.
 
-% Criar veneno com massa entre 20 e 30
+% Criar veneno com massa entre 30 e 130
 create_poison() ->
-    % rand:uniform(11) dá 1 a 11 -> Massa 20 a 30
-    Mass = float(19 + rand:uniform(11)),
+    Mass = float(29 + rand:uniform(101)),
     Radius = math:sqrt(Mass / math:pi()) * 3.0,
 
     #poison{
@@ -79,6 +83,33 @@ calculate_spawn_positions(3, Radius) ->
         {float(round(Cx + Radius * math:cos(A))), float(round(Cy + Radius * math:sin(A)))}
      || A <- Angles
     ].
+
+% Criar Food de forma segura (isto é, de maneira a que não dê spawn em cima de um jogador)
+create_food_safe(Players) ->
+    create_entity_safe(fun create_food/0, Players, ?RESPAWN_MAX_ATTEMPTS).
+% Criar Poison de forma segura
+create_poison_safe(Players) ->
+    create_entity_safe(fun create_poison/0, Players, ?RESPAWN_MAX_ATTEMPTS).
+
+% Função genérica para criar Foods ou Poisons de forma segura
+create_entity_safe(CreateFun, _, 0) ->
+    % Fallback: criar sem verificação após as tentativas se esgotarem
+    CreateFun();
+create_entity_safe(CreateFun, Players, Attempts) ->
+    Entity = CreateFun(),
+    {EntityX, EntityY, EntityR} = entity_geometry(Entity),
+
+    % Verificar overlaps com jogadores
+    Overlaps = lists:any(
+        fun(P) ->
+            check_overlap({EntityX, EntityY}, {P#player.x, P#player.y}, EntityR, P#player.radius)
+        end,
+        maps:values(Players)
+    ),
+    case Overlaps of
+        false -> Entity;
+        true -> create_entity_safe(CreateFun, Players, Attempts - 1)
+    end.
 
 % --------------------------------------------------------------------------------------------
 % MOVIMENTOS DO JOGADOR
@@ -443,8 +474,8 @@ manage_world_poisons(Poisons) ->
     % Garantir número mínimo de venenos
     fill_entities(Poisons, ?MIN_POISONS, [], fun() -> {create_poison(), poison} end).
 
-% Preencher o mapa com Foods ou Poisons até atingir o número mínimo e
-% criar uma lista de entidades criadas para enviar aos clientes
+% IN-GAME: Preencher o mapa com Foods ou Poisons até atingir o número mínimo e
+% criar uma lista com as entidades criadas para enviar aos clientes
 fill_entities(Entities, Min, CreatedEntities, CreateFun) ->
     case maps:size(Entities) < Min of
         true ->
@@ -457,4 +488,20 @@ fill_entities(Entities, Min, CreatedEntities, CreateFun) ->
             );
         false ->
             {Entities, CreatedEntities}
+    end.
+
+% ARRANQUE: criar número de entidades desejadas (Min) e garantir
+% que não fazem spawn em cima dos jogadores
+fill_entities_safe(Entities, Min, CreateFun, Players) ->
+    case maps:size(Entities) < Min of
+        true ->
+            E = CreateFun(Players),
+            fill_entities_safe(
+                maps:put(entity_id(E), E, Entities),
+                Min,
+                CreateFun,
+                Players
+            );
+        false ->
+            Entities
     end.
