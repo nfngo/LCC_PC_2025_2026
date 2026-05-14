@@ -19,27 +19,44 @@ start(Port) ->
     % Arranque do serviço de matchmaking
     matchmaker:start(),
 
-    spawn(fun() -> server(Port) end).
+    % Guardar pid do server
+    Pid = spawn(fun() -> server(Port, UsersFMPid, ScoresFMPid) end),
+    register(?MODULE, Pid),
+    % Retornar pid para o poder guardar na shell do erl
+    Pid.
 
 stop(Server) ->
-    login_manager:stop(),
-    matchmaker:stop(),
-    scores_manager:stop(),
-    % Registar o pid do UsersFM para ter acesso?
-    % files_manager:stop(users_fm_pid),
     Server ! stop.
 
-server(Port) ->
+server(Port, UsersFMPid, ScoresFMPid) ->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, line}, {reuseaddr, true}]),
-    spawn(fun() -> acceptor(LSock) end),
+    AcceptorPid = spawn(fun() -> acceptor(LSock) end),
     receive
-        stop -> ok
+        stop ->
+            % Fechar o LSock
+            gen_tcp:close(LSock),
+            % Matar o acceptor, por segurança
+            exit(AcceptorPid, shutdown),
+            % Parar os outros serviços/processos de forma ordenada
+            login_manager:stop(),
+            scores_manager:stop(),
+            matchmaker:stop(),
+            files_manager:stop(UsersFMPid),
+            files_manager:stop(ScoresFMPid),
+            io:format("SERVER: Stopped.~n")
     end.
 
 acceptor(LSock) ->
-    {ok, Sock} = gen_tcp:accept(LSock),
-    spawn(fun() -> acceptor(LSock) end),
-    user_not_auth(Sock).
+    case gen_tcp:accept(LSock) of
+        {ok, Sock} ->
+            spawn(fun() -> acceptor(LSock) end),
+            user_not_auth(Sock);
+        {error, closed} ->
+            % LSock foi fechado
+            ok;
+        {error, Reason} ->
+            io:format("ACCEPTOR: Unexpected error ~p~n", [Reason])
+    end.
 
 user_not_auth(Sock) ->
     receive
@@ -145,6 +162,15 @@ waiting_for_game(Sock, Username) ->
 waiting_loop(Sock, Username, MinDisplayUntil) ->
     % Esperar por feedback do matchmaker
     receive
+        {tcp, _, Data} ->
+            Line = string:trim(binary_to_list(Data)),
+            case string:split(Line, ",", all) of
+                ["LEAVE"] ->
+                    matchmaker:leave({self(), Username}),
+                    user_auth(Sock, Username);
+                _ ->
+                    ok
+            end;
         {game_started, GamePid, Data} ->
             io:format("SERVER: Game started for user ~p~n", [Username]),
             % Esperar o tempo mínimo se ainda não passou
@@ -153,22 +179,22 @@ waiting_loop(Sock, Username, MinDisplayUntil) ->
                 Delay when Delay > 0 -> timer:sleep(Delay);
                 _ -> ok
             end,
-            %% Envio de mensagem separada para garantir mudança de screen no client
+            % Enviar mensagem separada para garantir mudança de screen no client
             gen_tcp:send(Sock, <<"GAME_START\n">>),
             gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
         {waiting_other_players, WPSize} ->
-            io:format("SERVER: ~b waiting players~n", [WPSize]),
+            % Informar o jogador que está à espera
             Payload = io_lib:format("WAITING_OTHER_PLAYERS,~b\n", [WPSize]),
             gen_tcp:send(Sock, list_to_binary(Payload)),
             waiting_loop(Sock, Username, MinDisplayUntil);
         {active_games_full, _} ->
-            % Informar o cliente que está à espera por falta de slots
+            % Informar o jogador que está à espera por falta de slots
             gen_tcp:send(Sock, <<"ACTIVE_GAMES_FULL\n">>),
             waiting_loop(Sock, Username, MinDisplayUntil);
         {tcp_closed, _} ->
             % Notificar o matchmaker para remover o jogador da fila
-            matchmaker:leave(self()),
+            matchmaker:leave({self(), Username}),
             login_manager:logout(Username),
             ok;
         {error, Reason} ->
