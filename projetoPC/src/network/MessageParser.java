@@ -236,4 +236,13 @@ public class MessageParser {
             scores.put(i+1, new ParseScore(scoreParts[0], Integer.parseInt(scoreParts[1])));
         }
     }
+
+    public static String parseGameOver(String payload, Map<Integer, ParseScore> scores) {
+        String[] parts = payload.split(",");
+        for(int i = 1; i < parts.length; i++) {
+            String[] scoreParts = parts[i].split(":");
+            scores.put(i, new ParseScore(scoreParts[0], Integer.parseInt(scoreParts[1])));
+        }
+        return parts[0];
+    }
 }

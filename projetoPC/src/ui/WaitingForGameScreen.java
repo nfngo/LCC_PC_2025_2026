@@ -1,5 +1,6 @@
 package ui;
 
+import network.ClientConnection;
 import processing.core.PApplet;
 import state.GameState;
 import state.StateManager;
@@ -10,14 +11,16 @@ import java.util.Collections;
 public class WaitingForGameScreen {
     private final PApplet p;
     private final StateManager manager;
+    private final ClientConnection conn;
 
     private String message = ""; // feedback (erro/sucesso)
 
     private final ArrayList<String> scores = new ArrayList<>();
 
-    public WaitingForGameScreen(PApplet p, StateManager manager) {
+    public WaitingForGameScreen(PApplet p, StateManager manager,  ClientConnection conn) {
         this.p = p;
         this.manager = manager;
+        this.conn = conn;
     }
 
     public void update() {}
@@ -38,6 +41,11 @@ public class WaitingForGameScreen {
     }
 
     public void handleKey(char key, int keyCode) {
+    }
+
+    private void leave() {
+        conn.send("LEAVE");
+        manager.setState(GameState.MENU);
     }
 
     public void onPlaySuccess() {
