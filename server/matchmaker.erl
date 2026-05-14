@@ -28,7 +28,9 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
         {join, {PlayerPid, Username}} ->
             NewWaitingPlayers = WaitingPlayers ++ [{PlayerPid, Username}],
             WPSize = length(NewWaitingPlayers),
-            io:format("MATCHMAKER: ~p joined. Waiting players: ~p~n", [Username, NewWaitingPlayers]),
+            io:format("MATCHMAKER: User ~p joined. Waiting players: ~p~n", [
+                Username, NewWaitingPlayers
+            ]),
             if
                 WPSize =:= 4 andalso ActiveGames < 4 ->
                     % Se existir um timer ativo, cancelá-lo
@@ -46,7 +48,7 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
                     % Se temos 3 jogadores à espera e nenhum timer ativo, criar timer
                     % e enviar mensagem start_game após 10 segundos
                     io:format("MATCHMAKER: 3 players waiting. Starting timer...~n"),
-                    PlayerPid ! {waiting_other_players, WPSize},
+                    [Pid ! {waiting_other_players, WPSize} || {Pid, _} <- NewWaitingPlayers],
                     TRef = erlang:send_after(10000, self(), start_game),
                     loop(NewWaitingPlayers, ActiveGames, TRef);
                 ActiveGames >= 4 ->
@@ -62,11 +64,14 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
                         "MATCHMAKER: Not enough players to start a game. Waiting players: ~p~n",
                         [NewWaitingPlayers]
                     ),
-                    PlayerPid ! {waiting_other_players, WPSize},
+                    [Pid ! {waiting_other_players, WPSize} || {Pid, _} <- NewWaitingPlayers],
                     loop(NewWaitingPlayers, ActiveGames, TimerRef)
             end;
-        {leave, PlayerPid} ->
+        {leave, {PlayerPid, Username}} ->
+            io:format("MATCHMAKER: User ~p left the waiting queue...~n", [Username]),
             NewWaitingPlayers = lists:keydelete(PlayerPid, 1, WaitingPlayers),
+            WPSize = length(NewWaitingPlayers),
+            [Pid ! {waiting_other_players, WPSize} || {Pid, _} <- NewWaitingPlayers],
             loop(NewWaitingPlayers, ActiveGames, TimerRef);
         start_game ->
             % Verificar novamente se há jogadores suficientes
