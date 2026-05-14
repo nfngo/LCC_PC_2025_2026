@@ -14,6 +14,7 @@ public class StateManager {
     private final MenuScreen menu;
     private final ScoreboardScreen scoreboard;
     private final WaitingForGameScreen waiting;
+    private final GameOverScreen gameOver;
 
     private final GameWorld world;
 
@@ -23,7 +24,8 @@ public class StateManager {
         login = new LoginScreen(p, this, conn);
         menu = new MenuScreen(p, this, conn);
         scoreboard = new ScoreboardScreen(p, this);
-        waiting = new WaitingForGameScreen(p, this);
+        waiting = new WaitingForGameScreen(p, this, conn);
+        gameOver = new GameOverScreen(p, this, conn);
     }
 
     public void update() {
@@ -34,6 +36,7 @@ public class StateManager {
             case GAME -> world.update();
             case SCOREBOARD -> scoreboard.update();
             case WAITING_FOR_GAME -> waiting.update();
+            case GAME_OVER -> gameOver.update();
         }
     }
 
@@ -45,6 +48,7 @@ public class StateManager {
             case GAME -> world.draw();
             case SCOREBOARD -> scoreboard.draw();
             case WAITING_FOR_GAME -> waiting.draw();
+            case GAME_OVER -> gameOver.draw();
         }
     }
 
@@ -55,6 +59,7 @@ public class StateManager {
             case MENU -> menu.handleKey(key, keyCode);
             case SCOREBOARD -> scoreboard.handleKey(key, keyCode);
             case WAITING_FOR_GAME -> waiting.handleKey(key, keyCode);
+            case GAME_OVER -> gameOver.handleKey(key, keyCode);
         }
     }
 
@@ -84,5 +89,9 @@ public class StateManager {
 
     public WaitingForGameScreen getWaiting() {
         return waiting;
+    }
+
+    public GameOverScreen getGameOver() {
+        return gameOver;
     }
 }

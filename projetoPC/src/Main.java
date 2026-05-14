@@ -33,7 +33,7 @@ public class Main extends PApplet {
         frameRate(60);
 
         input = new InputHandler();
-        connection = new ClientConnection("127.0.0.1", 12345);
+        connection = new ClientConnection("192.168.1.81", 12345);
         GameWorld world = new GameWorld(this);
         stateManager = new StateManager(this, world, connection);
 
@@ -100,14 +100,11 @@ public class Main extends PApplet {
                         break;
 
                     case GAME_OVER:
-                        stateManager.getWorld().onGameOver(sm.getPayload());
-                        // Implementar mensagem no Menu ou criar novo screen após jogo terminar
-                        // stateManager.getMenu().showGameOver("Game Over!");
-                        stateManager.setState(GameState.MENU);
+                        stateManager.getGameOver().onGameOverSuccess(sm.getPayload());
                         break;
 
                     case SCOREBOARD_OK:
-                        if(stateManager.getState() == GameState.MENU) {
+                        if(stateManager.getState() == GameState.MENU || stateManager.getState() == GameState.GAME_OVER) {
                             stateManager.getScoreboard().onGetScoreboardSuccess(sm.getPayload());
                             break;
                         }

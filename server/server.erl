@@ -188,6 +188,11 @@ waiting_loop(Sock, Username, MinDisplayUntil) ->
             Payload = io_lib:format("WAITING_OTHER_PLAYERS,~b\n", [WPSize]),
             gen_tcp:send(Sock, list_to_binary(Payload)),
             waiting_loop(Sock, Username, MinDisplayUntil);
+        {gaming_starting_soon, WPSize} ->
+            % Informar o jogador que o jogo está quase a começar
+            Payload = io_lib:format("GAME_STARTING_SOON,~b\n", [WPSize]),
+            gen_tcp:send(Sock, list_to_binary(Payload)),
+            waiting_loop(Sock, Username, MinDisplayUntil);
         {active_games_full, _} ->
             % Informar o jogador que está à espera por falta de slots
             gen_tcp:send(Sock, <<"ACTIVE_GAMES_FULL\n">>),
