@@ -12,13 +12,15 @@ init(Participants, MatchmakerPid) ->
     io:format("GAME_SESSION: players:\n ~p~n", [Players]),
 
     % Inicializar Foods (inicialmente 12)
-    FoodsList = [game_logic:create_food() || _ <- lists:seq(1, 12)],
-    Foods = maps:from_list([{F#food.id, F} || F <- FoodsList]),
+    Foods = game_logic:fill_entities_safe(
+        #{}, ?STARTING_FOODS, fun(P) -> game_logic:create_food_safe(P) end, Players
+    ),
     io:format("GAME_SESSION: foods:\n ~p~n", [Foods]),
 
     % Inicializar Poisons (inicialmente 15)
-    PoisonsList = [game_logic:create_poison() || _ <- lists:seq(1, 15)],
-    Poisons = maps:from_list([{P#poison.id, P} || P <- PoisonsList]),
+    Poisons = game_logic:fill_entities_safe(
+        #{}, ?STARTING_POISONS, fun(P) -> game_logic:create_poison_safe(P) end, Players
+    ),
     io:format("GAME_SESSION: poisons:\n ~p~n", [Poisons]),
 
     % Criar timestamp para permitir interpolação no cliente
@@ -42,7 +44,18 @@ init(Participants, MatchmakerPid) ->
     % Enviar a mensagem 'tick' para este processo (self()) a cada 50ms
     TimerRef = timer:send_interval(?TICK_INTERVAL, self(), tick),
 
+    % Agendar respawn de foods e poisons
+    schedule_entity_spawn(food),
+    schedule_entity_spawn(poison),
+
     loop(Players, Foods, Poisons, InitialScores, MatchmakerPid, ?GAME_TIME, TimerRef).
+
+schedule_entity_spawn(food) ->
+    Delay = 4000 + rand:uniform(4000),
+    erlang:send_after(Delay, self(), {spawn_entity, food});
+schedule_entity_spawn(poison) ->
+    Delay = 5000 + rand:uniform(5000),
+    erlang:send_after(Delay, self(), {spawn_entity, poison}).
 
 % Criar jogadores e atribui posições iniciais no mapa
 create_players(Participants) ->
@@ -75,6 +88,28 @@ loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
                 error ->
                     loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef)
             end;
+        {spawn_entity, Type} ->
+            {MaxSize, CurrentMap, CreateFun} =
+                case Type of
+                    food -> {?MAX_FOODS, Foods, fun game_logic:create_food/0};
+                    poison -> {?MAX_POISONS, Poisons, fun game_logic:create_poison/0}
+                end,
+            {NewFoods, NewPoisons} =
+                case maps:size(CurrentMap) =< MaxSize of
+                    true ->
+                        Entity = CreateFun(),
+                        Id = game_logic:entity_id(Entity),
+                        TimeStamp = erlang:system_time(millisecond),
+                        send_changes_to_players(Players, #{}, [{Entity, Type}], [], TimeStamp),
+                        case Type of
+                            food -> {maps:put(Id, Entity, Foods), Poisons};
+                            poison -> {Foods, maps:put(Id, Entity, Poisons)}
+                        end;
+                    false ->
+                        {Foods, Poisons}
+                end,
+            schedule_entity_spawn(Type),
+            loop(Players, NewFoods, NewPoisons, GameScores, MatchmakerPid, TimeLeft, TimerRef);
         tick ->
             % Calcular quanto tempo falta
             NewTimeLeft = TimeLeft - ?TICK_INTERVAL,
