@@ -34,22 +34,22 @@ loop(Scores, ScoresFMPid) ->
         stop ->
             % Gravar o estado atual antes de parar o processo
             files_manager:save(ScoresFMPid, Scores),
-            io:format("SCORES_MANAGER: final state saved. Shutting down...~n"),
+            io:format("SCORES_MANAGER: Final state saved. Shutting down...~n"),
             ok;
         {register_user, Username} ->
-            io:format("SCORES_MANAGER: registering user ~p...~n", [Username]),
+            io:format("SCORES_MANAGER: Registering user ~p...~n", [Username]),
             % Adicionar um novo utilizador com pontuação inicial de 0 no momento do registo
             NewScores = maps:put(Username, 0, Scores),
             files_manager:save(ScoresFMPid, NewScores),
             loop(NewScores, ScoresFMPid);
         {delete_user, Username} ->
-            io:format("SCORES_MANAGER: deleting user ~p...~n", [Username]),
+            io:format("SCORES_MANAGER: Deleting user ~p...~n", [Username]),
             % Remover um utilizador do mapa de pontuações quando a sua conta for eliminada
             NewScores = maps:remove(Username, Scores),
             files_manager:save(ScoresFMPid, NewScores),
             loop(NewScores, ScoresFMPid);
         {update_scores, ScoresToUpdate} ->
-            io:format("SCORES_MANAGER: updating scores...~n"),
+            io:format("SCORES_MANAGER: Updating scores...~n"),
             % Atualizar a pontuação dos utilizadores após o fim de um jogo
             NewScores = lists:foldl(
                 fun({User, Points}, Acc) ->
@@ -63,7 +63,7 @@ loop(Scores, ScoresFMPid) ->
             files_manager:save(ScoresFMPid, NewScores),
             loop(NewScores, ScoresFMPid);
         {get_scoreboard, FromPid, Tag} ->
-            io:format("SCORES_MANAGER: received request for scoreboard~n"),
+            io:format("SCORES_MANAGER: Received request for scoreboard~n"),
             % Converter mapa para lista
             ScoresList = maps:to_list(Scores),
             % Ordenar por pontuação
