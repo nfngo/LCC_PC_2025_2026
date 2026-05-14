@@ -99,10 +99,6 @@ public class Main extends PApplet {
                         stateManager.getWaiting().onActiveGamesFull();
                         break;
 
-                    case GAME_START:
-                        stateManager.getWaiting().onGameStart();
-                        break;
-
                     case GAME_OVER:
                         stateManager.getWorld().onGameOver(sm.getPayload());
                         // Implementar mensagem no Menu ou criar novo screen após jogo terminar
@@ -153,6 +149,7 @@ public class Main extends PApplet {
 
                 if(sm.getType() == ServerMessage.Type.STATE) {
                     stateManager.getWorld().applyState(sm.getPayload());
+                    stateManager.setState(GameState.GAME);
                 }
 
                 if(sm.getType() == ServerMessage.Type.DELTA) {

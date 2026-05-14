@@ -180,7 +180,7 @@ waiting_loop(Sock, Username, MinDisplayUntil) ->
                 _ -> ok
             end,
             % Enviar mensagem separada para garantir mudança de screen no client
-            gen_tcp:send(Sock, <<"GAME_START\n">>),
+            % gen_tcp:send(Sock, <<"GAME_START\n">>),
             gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
         {waiting_other_players, WPSize} ->
