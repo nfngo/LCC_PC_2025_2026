@@ -45,7 +45,7 @@ loop(WaitingPlayers, ActiveGames, TimerRef) ->
                 % Verificar se o timer já existe para evitar criar múltiplos timers desnecessários
                 WPSize =:= 3 andalso ActiveGames < 4 ->
                     io:format("MATCHMAKER: 3 players waiting. Starting timer...~n"),
-                    [Pid ! {waiting_other_players, WPSize} || {Pid, _} <- NewWaitingPlayers],
+                    [Pid ! {game_starting_soon, WPSize} || {Pid, _} <- NewWaitingPlayers],
                     % Se temos 3 jogadores à espera e nenhum timer ativo, criar timer
                     % Caso contrário, cancelar timer antigo e criar novo
                     TRef = restart_timer(TimerRef),
