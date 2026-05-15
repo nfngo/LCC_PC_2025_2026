@@ -188,7 +188,7 @@ waiting_loop(Sock, Username, MinDisplayUntil) ->
             Payload = io_lib:format("WAITING_OTHER_PLAYERS,~b\n", [WPSize]),
             gen_tcp:send(Sock, list_to_binary(Payload)),
             waiting_loop(Sock, Username, MinDisplayUntil);
-        {gaming_starting_soon, WPSize} ->
+        {game_starting_soon, WPSize} ->
             % Informar o jogador que o jogo está quase a começar
             Payload = io_lib:format("GAME_STARTING_SOON,~b\n", [WPSize]),
             gen_tcp:send(Sock, list_to_binary(Payload)),
@@ -213,13 +213,13 @@ in_game(Sock, Username, GamePid) ->
             % Enviar comandos do jogador para o processo do jogo
             case string:split(Line, ",", all) of
                 ["INPUT", L, U, R] ->
-                    GamePid ! {input, self(), {to_bool(L), to_bool(U), to_bool(R)}},
+                    game_session:process_input(GamePid, self(), {to_bool(L), to_bool(U), to_bool(R)}),
                     in_game(Sock, Username, GamePid);
                 _ ->
                     in_game(Sock, Username, GamePid)
             end;
         {delta_update, Data} ->
-            io:format("SERVER: Sending Delta update for user ~p~n", [Username]),
+            % io:format("SERVER: Sending Delta update for user ~p~n", [Username]),
             gen_tcp:send(Sock, Data),
             in_game(Sock, Username, GamePid);
         {game_over, Result, ScoreboardStr} ->
@@ -227,7 +227,8 @@ in_game(Sock, Username, GamePid) ->
             gen_tcp:send(Sock, list_to_binary(Payload)),
             user_auth(Sock, Username);
         {tcp_closed, _} ->
-            io:format("SERVER: User ~p disconnected...~n", [Username]),
+            io:format("SERVER: User ~p disconnected from game...~n", [Username]),
+            game_session:leave(GamePid, self()),
             login_manager:logout(Username),
             ok;
         {tcp_error, _, _} ->

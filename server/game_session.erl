@@ -1,10 +1,16 @@
 -module(game_session).
--export([start_game/2, init/2]).
+-export([start_game/2, init/2, leave/2, process_input/3]).
 -include("game_entities.hrl").
 -include("game_constants.hrl").
 
 start_game(Participants, MatchmakerPid) ->
     spawn(fun() -> init(Participants, MatchmakerPid) end).
+
+leave(GamePid, PlayerPid) ->
+    GamePid ! {remove_player, PlayerPid}.
+
+process_input(GamePid, PlayerPid, {L, U, R}) ->
+    GamePid ! {input, PlayerPid, {L, U, R}}.
 
 init(Participants, MatchmakerPid) ->
     % Inicializar avatares dos jogadores
@@ -26,6 +32,9 @@ init(Participants, MatchmakerPid) ->
     % Criar timestamp para permitir interpolação no cliente
     TimeStamp = erlang:system_time(millisecond),
 
+    % Inicializar pontuações dos jogadores
+    InitialScores = maps:from_list([{P#player.username, 0} || P <- maps:values(Players)]),
+
     % Serializar o estado inicial
     InitialState = game_serialization:serialize_world(Players, Foods, Poisons),
 
@@ -37,9 +46,6 @@ init(Participants, MatchmakerPid) ->
         end,
         Players
     ),
-
-    % Inicializar pontuações dos jogadores
-    InitialScores = maps:from_list([{P#player.username, 0} || P <- maps:values(Players)]),
 
     % Enviar a mensagem 'tick' para este processo (self()) a cada 50ms
     TimerRef = timer:send_interval(?TICK_INTERVAL, self(), tick),
@@ -73,6 +79,35 @@ create_players(Participants) ->
 
 loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
     receive
+        % Remover jogador caso tenha dado disconnect
+        {remove_player, PlayerPid} ->
+            case maps:find(PlayerPid, Players) of
+                {ok, Player} ->
+                    % Atualizar mapa de jogadores
+                    NewPlayers = maps:remove(PlayerPid, Players),
+                    % Atualizar mapa de scores
+                    NewGameScores = maps:remove(Player#player.username, GameScores),
+                    TimeStamp = erlang:system_time(millisecond),
+                    % Enviar mensagem para todos os jogadores
+                    send_removed_player(NewPlayers, Player#player.id, TimeStamp),
+                    % Verificar número de jogadores em jogo
+                    case maps:size(NewPlayers) of
+                        0 ->
+                            % Todos os jogadores saíram — terminar sem declarar vencedor
+                            io:format("GAME_SESSION: All players disconnected. Ending game...~n"),
+                            timer:cancel(TimerRef),
+                            MatchmakerPid ! game_finished;
+                        1 ->
+                            % Só resta um jogador — terminar e declarar vencedor por abandono
+                            io:format("GAME_SESSION: Only one player remaining. Ending game...~n"),
+                            timer:cancel(TimerRef),
+                            end_game(NewPlayers, NewGameScores, MatchmakerPid);
+                        _ ->
+                            loop(NewPlayers, Foods, Poisons, NewGameScores, MatchmakerPid, TimeLeft, TimerRef)
+                    end;
+                _ ->
+                    loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef)
+            end;    
         {input, PlayerPid, {Left, Up, Right}} ->
             case maps:find(PlayerPid, Players) of
                 {ok, Player} ->
@@ -100,7 +135,7 @@ loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
                         Entity = CreateFun(),
                         Id = game_logic:entity_id(Entity),
                         TimeStamp = erlang:system_time(millisecond),
-                        send_changes_to_players(Players, #{}, [{Entity, Type}], [], TimeStamp),
+                        send_changes_to_players(Players, #{}, [{Entity, Type}], [], GameScores, TimeStamp),
                         case Type of
                             food -> {maps:put(Id, Entity, Foods), Poisons};
                             poison -> {Foods, maps:put(Id, Entity, Poisons)}
@@ -160,7 +195,7 @@ loop(Players, Foods, Poisons, GameScores, MatchmakerPid, TimeLeft, TimerRef) ->
                             % Enviar apenas os jogadores que foram atualizados (UpdatedPlayers)
                             % Enviar alterações/delta para todos os jogadores
                             send_changes_to_players(
-                                FinalPlayers, UpdatedPlayers, CreatedEntities, RemovedIDs, TimeStamp
+                                FinalPlayers, UpdatedPlayers, CreatedEntities, RemovedIDs, NewGameScores, TimeStamp
                             )
                     end,
 
@@ -219,11 +254,23 @@ check_updated_players(OldPlayers, NewPlayers) ->
     ).
 
 % Enviar as alterações (delta) para os jogadores
-send_changes_to_players(Players, UpdatedPlayers, NewEntities, RemovedIDs, TimeStamp) ->
+send_changes_to_players(Players, UpdatedPlayers, NewEntities, RemovedIDs, GameScores, TimeStamp) ->
     Delta = game_serialization:serialize_changes(UpdatedPlayers, NewEntities, RemovedIDs),
     Header = io_lib:format("DELTA,TS,~p;", [TimeStamp]),
     maps:foreach(
-        fun(Pid, _P) ->
+        fun(Pid, P) ->
+            PlayerScore = maps:get(P#player.username, GameScores),
+            Score = game_serialization:serialize_player_score(PlayerScore),
+            Pid ! {delta_update, list_to_binary([Header, Delta, Score, ";\n"])}
+        end,
+        Players
+    ).
+
+send_removed_player(Players, Id, TimeStamp) ->
+    Delta = game_serialization:serialize_removed_player(Id),
+    Header = io_lib:format("DELTA,TS,~p;", [TimeStamp]),
+    maps:foreach(
+        fun(Pid, _) ->
             Pid ! {delta_update, list_to_binary([Header, Delta, ";\n"])}
         end,
         Players
@@ -258,10 +305,7 @@ end_game(Players, GameScores, MatchmakerPid) ->
 
 notify_players_game_over(Players, SortedScores, Result) ->
     % Criar texto com resultados para enviar aos jogadores
-    ScoreboardStr = string:join(
-        [io_lib:format("~s:~p", [U, S]) || {U, S} <- SortedScores],
-        ","
-    ),
+    ScoreboardStr = game_serialization:serialize_scores(SortedScores),
 
     % Enviar a mensagem de game over para cada jogador,
     % incluindo o resultado (vencedor ou empate) e a pontuação final
