@@ -29,81 +29,75 @@ public class GameOverScreen {
     public void update() {}
 
     public void draw() {
-        float startingX = ((float) p.width - 600) / 2f; // 340
-        float startingY = ((float) p.height - 500) / 2f; // 110
-        float finalX = startingX + 600;
-        float centerX = (float) p.width / 2f;
+        float boxW = 600;
+        float boxH = 500;
+        float startX = (p.width - boxW) / 2f;
+        float startY = (p.height - boxH) / 2f;
+        float centerX = p.width / 2f;
 
-        // 1. Caixa do menu
+        // Caixa Principal
         p.fill(240);
         p.stroke(0);
         p.strokeWeight(4);
-        p.rect(startingX, startingY, 600, 500);
+        p.rect(startX, startY, boxW, boxH);
 
-        // 2. Título (Aumentado para destaque)
+        // Título
+        p.noStroke();
         p.fill(0);
         p.textSize(42);
         p.textAlign(PApplet.CENTER, PApplet.TOP);
-        p.text("GAME OVER", centerX, startingY + 40);
+        p.text("GAME OVER", centerX, startY + 40);
 
-        // 3. Mensagem (Vencedor)
+        // Vencedor
         p.textSize(28);
-        p.text(message, centerX, startingY + 110);
+        p.textAlign(PApplet.CENTER, PApplet.CENTER);
+        p.text(message, centerX, startY + 125);
 
-        // --- Configuração da Tabela ---
-        float tableTop = startingY + 180;
-        float rowHeight = 30;
-        // Definimos as margens laterais da tabela dentro da caixa (80px de cada lado)
-        float tableLeft = startingX + 80;
-        float tableRight = finalX - 80;
+        // Cabeçalho da Tabela
+        float tableTop = startY + 200;
+        float rankX = startX + 150;
+        float scoreX = startX + boxW - 150;
 
-        // 4. Cabeçalhos da Tabela
         p.textSize(16);
-        p.fill(100); // Cinza para os cabeçalhos
+        p.fill(100);
         p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
+        p.text("RANK", rankX, tableTop);
+        p.text("PLAYER", centerX, tableTop);
+        p.text("SCORE", scoreX, tableTop);
 
-        p.text("RANK", tableLeft + 40, tableTop);         // Coluna 1
-        p.text("PLAYER", centerX, tableTop);              // Coluna 2
-        p.text("SCORE", tableRight - 40, tableTop);       // Coluna 3
-
-        // Linha horizontal principal (Header)
         p.stroke(0);
         p.strokeWeight(2);
-        p.line(tableLeft, tableTop + 5, tableRight, tableTop + 5);
+        p.line(startX + 80, tableTop + 5, startX + boxW - 80, tableTop + 5);
 
-        // 5. Desenho dos Scores
+        // Scores
+        p.noStroke();
         p.fill(0);
         p.textSize(18);
-
-        for (int i = 0; i < scores.size() && i < 6; i++) { // Limitado a 6 para caber no espaço
+        p.textAlign(PApplet.CENTER, PApplet.CENTER);
+        for (int i = 0; i < scores.size(); i++) {
             ParseScore score = scores.get(i + 1);
-            float yPos = tableTop + 30 + (i * rowHeight);
+            float y = tableTop + 30 + (i * 35);
 
-            // Alinhamento centralizado em relação às colunas do cabeçalho
-            p.textAlign(PApplet.CENTER, PApplet.CENTER);
-
-            // Rank
-            p.text(i + 1, tableLeft + 40, yPos);
-            // Player Name
-            p.text(score.username(), centerX, yPos);
-            // Score
-            p.text(score.score(), tableRight - 40, yPos);
-
-            // Linhas horizontais subtis entre jogadores (opcional)
-            p.stroke(220);
-            p.strokeWeight(1);
-            p.line(tableLeft, yPos + 15, tableRight, yPos + 15);
+            if (i+1 == 1) {
+                p.circle(rankX, y, 24);
+                p.fill(255);
+            }
+            p.text(i + 1, rankX, y);
+            p.fill(0);
+            p.text(score.username(), centerX, y);
+            p.text(score.score(), scoreX, y);
         }
 
-        // 6. Rodapé (Separado por linha grossa)
-        p.stroke(0);
-        p.strokeWeight(3);
-        p.line(startingX + 60, startingY + 430, finalX - 60, startingY + 430);
+        // Rodapé
+        p.stroke(230);
+        p.strokeWeight(1);
+        p.line(startX + 60, startY + boxH - 35, startX + boxW - 60, startY + boxH - 35);
 
-        p.fill(0);
+        p.noStroke();
+        p.fill(50);
         p.textSize(16);
         p.textAlign(PApplet.CENTER, PApplet.TOP);
-        p.text("[M] MAIN MENU | [S] SCOREBOARD", centerX, startingY + 450);
+        p.text("[M] RETURN TO MAIN MENU", centerX, startY + boxH - 25);
     }
 
     public void handleKey(char key, int keyCode) {

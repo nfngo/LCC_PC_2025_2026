@@ -13,6 +13,7 @@ public class LoginScreen {
     private String username = "";
     private String password = "";
     private boolean typingUser = true;
+    private int selected = 0;
 
     private String message = ""; // feedback (erro/sucesso)
 
@@ -25,48 +26,138 @@ public class LoginScreen {
     public void update() {}
 
     public void draw() {
+        float boxW = 600;
+        float boxH = 500;
+        float startX = (p.width - boxW) / 2f;
+        float startY = (p.height - boxH) / 2f;
+        float centerX = p.width / 2f;
+
+        // Caixa Principal
+        p.fill(240);
+        p.stroke(0);
+        p.strokeWeight(4);
+        p.rect(startX, startY, boxW, boxH);
+
+        // Título
+        p.noStroke();
         p.fill(0);
         p.textSize(32);
-        p.text("LOGIN / REGISTER", 250, 100);
+        p.textAlign(PApplet.CENTER, PApplet.TOP);
+        p.text("WELCOME TO CIRCLE HUNT", centerX, startY + 20);
 
-        p.textSize(16);
+        p.stroke(0);
+        p.strokeWeight(2);
+        p.line(startX, startY + 60, startX + boxW, startY + 60);
+        p.noStroke();
 
-        // campos
-        p.text("Username: " + username, 200, 200);
-        p.text("Password: " + "*".repeat(password.length()), 200, 240);
+        // Username e Password
+        p.textSize(24);
 
-        // highlight campo ativo
-        if (typingUser) {
-            p.line(200, 205, 400, 205);
-        } else {
-            p.line(200, 245, 400, 245);
+        float usernameY = startY + 120;
+        float usernameTextY = usernameY + 40;
+
+        float passwordY = usernameTextY + 60;
+        float passwordTextY = passwordY + 40;
+
+        // Campos de texto
+        p.textSize(24);
+
+        p.fill(0);
+        p.textAlign(PApplet.CENTER, PApplet.CENTER);
+
+        // USERNAME
+        p.text("USERNAME:", centerX, usernameY);
+        p.text(username, centerX, usernameTextY);
+        p.stroke(230);
+        p.line(startX + 120, usernameTextY + 18, startX + boxW - 120, usernameTextY + 18);
+
+        // PASSWORD
+        p.text("PASSWORD:", centerX, passwordY);
+        p.text("*".repeat(password.length()), centerX, passwordTextY);
+        p.line(startX + 120, passwordTextY + 15, startX + boxW - 120, passwordTextY + 15);
+
+        if (selected == 0) {
+            // Linha do username
+            p.stroke(159, 199, 227);
+            p.line(startX + 120, usernameTextY + 18, startX + boxW - 120, usernameTextY + 18);
+        } else if(selected == 1) {
+            // Linha da password
+            p.stroke(159, 199, 227);
+            p.line(startX + 120, passwordTextY + 15, startX + boxW - 120, passwordTextY + 15);
         }
-
-        // instruções
-        p.text("TAB - Switch field", 200, 300);
-        p.text("ENTER - Login", 200, 320);
-        p.text("ALT - Register", 200, 340);
-        p.text("DEL - Delete account", 200, 360);
+        p.noStroke();
 
         // mensagem feedback
-        p.fill(255, 0, 0);
-        p.text(message, 200, 400);
+        p.textSize(18);
+        p.fill(180, 0, 0);
+        p.text(message, centerX, passwordTextY + 40);
+        p.fill(0);
+
+        p.textAlign(PApplet.CENTER, PApplet.CENTER);
+        p.textSize(24);
+
+        String loginText = "LOGIN";
+        float loginY = startY + 340;
+        p.text("LOGIN", centerX, loginY);
+
+        String registerText = "REGISTER";
+        float registerY = loginY + 40;
+        p.text(registerText, centerX, registerY);
+
+        String deleteText = "DELETE ACCOUNT";
+        float deleteY = registerY + 40;
+        p.fill(220, 0 , 0);
+        p.text(deleteText, centerX, deleteY);
+        p.fill(0);
+
+        // Círculo antes de play
+        if(selected == 2){
+            drawSelectionCircle(loginText, loginY);
+        } else if(selected == 3){
+            drawSelectionCircle(registerText, registerY);
+        } else if(selected == 4) {
+            drawSelectionCircle(deleteText, deleteY);
+        }
+
+        // Rodapé
+        p.stroke(230);
+        p.strokeWeight(1);
+        p.line(startX + 60, startY + boxH - 35, startX + boxW - 60, startY + boxH - 35);
+
+        p.noStroke();
+        p.fill(50);
+        p.textSize(16);
+        p.textAlign(PApplet.CENTER, PApplet.TOP);
+        p.text("[TAB] NAVIGATE | [ENTER] SELECT", centerX, startY + boxH - 25);
+    }
+
+    public void drawSelectionCircle(String text, float startY) {
+        float centerX = (float) p.width / 2;
+
+        float msgWidth = p.textWidth(text);
+        float circleX = centerX - (msgWidth / 2f) - 26;
+        float circleSize = 26;
+
+        p.fill(0);
+        p.circle(circleX, startY, circleSize);
     }
 
     public void handleKey(char key, int keyCode) {
 
         if (key == '\t') {
-            typingUser = !typingUser;
+            if(selected == 0 || selected == 1) {
+                typingUser = !typingUser;
+            }
+            selected = (selected + 1) % 5;
 
         } else if (keyCode == PApplet.ENTER) {
-            login();
-
-        } else if (keyCode == PApplet.ALT) {
-            register();
-
-        } else if (keyCode == PApplet.DELETE) {
-            deleteAccount();
-
+            if(selected == 2) {
+                login();
+            } else if(selected == 3) {
+                register();
+            } else if(selected == 4) {
+                deleteAccount();
+            }
         } else if (keyCode == PApplet.BACKSPACE) {
             handleBackspace();
 
@@ -75,29 +166,46 @@ public class LoginScreen {
         }
     }
 
-    private void login() {
+    private boolean invalidFields() {
         if (username.isEmpty() || password.isEmpty()) {
             message = "Fill all fields";
-            return;
+            return true;
         }
+        return false;
+    }
+
+    private boolean isDisconnected() {
+        if(!conn.isConnected()) {
+            boolean connected = conn.connect();
+
+            if(!connected) {
+                message = "Unable to connect to server...";
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void login() {
+        if(invalidFields()) return;
+
+        if(isDisconnected()) return;
 
         conn.send("LOGIN," + username + "," + password);
     }
 
     private void register() {
-        if (username.isEmpty() || password.isEmpty()) {
-            message = "Fill all fields";
-            return;
-        }
+        if(invalidFields()) return;
+
+        if(isDisconnected()) return;
 
         conn.send("REGISTER," + username + "," + password);
     }
 
     private void deleteAccount() {
-        if(username.isEmpty() || password.isEmpty()) {
-            message = "Fill all fields";
-            return;
-        }
+        if(invalidFields()) return;
+
+        if(isDisconnected()) return;
 
         conn.send("DELETE_ACCOUNT," + username + "," + password);
     }
@@ -156,6 +264,7 @@ public class LoginScreen {
         reset();
         message = "Logged out successfully";
         manager.setState(GameState.LOGIN);
+        conn.disconnect();
     }
 
     public void onDeleteSuccess() {
@@ -167,6 +276,10 @@ public class LoginScreen {
         if(payload.equals("invalid_credentials")) {
             message = "Invalid credentials";
         }
+    }
+
+    public void connectionLost() {
+        message = "Disconnected from server";
     }
 
     public void onError(String payload) {

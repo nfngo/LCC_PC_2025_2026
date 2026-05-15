@@ -3,7 +3,6 @@ package state;
 import processing.core.PApplet;
 import model.GameWorld;
 import network.ClientConnection;
-import input.InputHandler;
 import ui.*;
 
 public class StateManager {
