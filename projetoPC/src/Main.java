@@ -33,7 +33,7 @@ public class Main extends PApplet {
         frameRate(60);
 
         input = new InputHandler();
-        connection = new ClientConnection("192.168.1.81", 12345);
+        connection = new ClientConnection("127.0.0.1", 12345);
         GameWorld world = new GameWorld(this);
         stateManager = new StateManager(this, world, connection);
 
@@ -92,7 +92,11 @@ public class Main extends PApplet {
                         break;
 
                     case WAITING_OTHER_PLAYERS:
-                        stateManager.getWaiting().onWaitingOtherPlayers();
+                        stateManager.getWaiting().onWaitingOtherPlayers(sm.getPayload());
+                        break;
+
+                    case GAME_STARTING_SOON:
+                        stateManager.getWaiting().onGameStartingSoon(sm.getPayload());
                         break;
 
                     case ACTIVE_GAMES_FULL:
@@ -132,14 +136,7 @@ public class Main extends PApplet {
                 }
             }
 
-/*            if (connection.hasWorldQueueOverflow()) {
-                connection.clearWorldQueueOverflow();
-                connection.send("REQUEST_STATE");
-            }*/
-
             String stateMsg;
-/*            int processedWorldMessages = 0;
-            int maxWorldMessagesPerFrame = 50;*/
 
             while((stateMsg = connection.pollState()) != null) {
                 ServerMessage sm = MessageParser.parseMessage(stateMsg);
@@ -152,17 +149,16 @@ public class Main extends PApplet {
                 if(sm.getType() == ServerMessage.Type.DELTA) {
                     stateManager.getWorld().applyDelta(sm.getPayload());
                 }
-
-/*                processedWorldMessages++;*/
             }
 
-            stateManager.update();
-            stateManager.draw();
-
         } else {
-            fill(0);
-            text("Disconnected from server", 100, 100);
+            if (stateManager.getState() != GameState.LOGIN) {
+                stateManager.getLogin().connectionLost();
+                stateManager.setState(GameState.LOGIN);
+            }
         }
+        stateManager.update();
+        stateManager.draw();
     }
 
     public void keyPressed() {
