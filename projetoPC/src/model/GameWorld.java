@@ -3,7 +3,6 @@ package model;
 import network.ParseResult;
 import processing.core.PApplet;
 import entity.*;
-import processing.core.PConstants;
 
 import java.util.*;
 
@@ -18,6 +17,7 @@ public class GameWorld {
     private final Map<Integer, Avatar> objects;
 
     private Player self;
+    private int score = 0;
 
     public GameWorld(PApplet p) {
         this.p = p;
@@ -34,7 +34,7 @@ public class GameWorld {
     }
 
     public void applyDelta(String payload) {
-        parseDelta(p, payload, playersMap, objects);
+        this.score = parseDelta(p, payload, playersMap, objects);
     }
 
     public void update() {
@@ -70,29 +70,13 @@ public class GameWorld {
         self = null;
     }
 
-    public void onGameOver(String payload) {
-        System.out.println("Game Over!");
-
-        // extrair score do payload
-        // ex: GAME_OVER,150
-        // possibilidade de mostrar no ecrã
-        if (payload != null && !payload.isEmpty()) {
-            System.out.println("Final score: " + payload);
-        }
-
-        reset();
-    }
-
     void drawHUD() {
         p.fill(0);
         p.textSize(14);
-        p.textAlign(PConstants.LEFT);
+        p.textAlign(PApplet.LEFT);
 
-        // Exemplo - implementar?
-        p.text("Scores:", 10, 30);
-        p.text("P1 - Nuno: 2", 10, 45);
-        p.text("P2 - José: 1", 10, 60);
-        p.text("P3 - Carla: 0", 10, 75);
+        // Pontuação atual
+        p.text("Score: " + score, 10, 30);
 
         p.text("Controls:", 10, p.height - 60);
         p.text("UP - Move", 10, p.height - 45);
