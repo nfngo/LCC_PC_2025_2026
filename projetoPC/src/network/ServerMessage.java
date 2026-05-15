@@ -12,6 +12,7 @@ public class ServerMessage {
         DELETE_FAIL,
         PLAY_OK,
         WAITING_OTHER_PLAYERS,
+        GAME_STARTING_SOON,
         ACTIVE_GAMES_FULL,
         GAME_START,
         GAME_OVER,

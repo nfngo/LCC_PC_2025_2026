@@ -39,7 +39,10 @@ public class MessageParser {
             return new ServerMessage(ServerMessage.Type.PLAY_OK, "");
 
         } else if (msg.startsWith("WAITING_OTHER_PLAYERS")) {
-            return new ServerMessage(ServerMessage.Type.WAITING_OTHER_PLAYERS, "");
+            return new ServerMessage(ServerMessage.Type.WAITING_OTHER_PLAYERS, payloadAfterComma(msg));
+
+        } else if (msg.startsWith("GAME_STARTING_SOON")) {
+            return new ServerMessage(ServerMessage.Type.GAME_STARTING_SOON, payloadAfterComma(msg));
 
         } else if (msg.startsWith("ACTIVE_GAMES_FULL")) {
             return new ServerMessage(ServerMessage.Type.ACTIVE_GAMES_FULL, "");
@@ -162,13 +165,14 @@ public class MessageParser {
         return new ParseResult(selfPlayer, selfId);
     }
 
-    public static void parseDelta(PApplet p,
+    public static int parseDelta(PApplet p,
                                   String payload,
                                   Map<Integer, Player> playersMap,
                                   Map<Integer, Avatar> objects) {
 
         String[] tokens = payload.split(";");
         long timestamp = 0L;
+        int score = 0;
 
         for (String t : tokens) {
             String[] parts = t.split(",");
@@ -224,9 +228,17 @@ public class MessageParser {
                     // Remover lista de objetos
                     objects.keySet().removeAll(idsToRemove);
                     break;
-
+                // Remover jogadores através do ID
+                case "DEL_P":
+                    int playerId = Integer.parseInt(parts[1]);
+                    playersMap.remove(playerId);
+                    break;
+                case "SCORE":
+                    score = Integer.parseInt(parts[1]);
+                    break;
             }
         }
+        return score;
     }
 
     public static void parseScoreboard(String payload, Map<Integer, ParseScore> scores) {

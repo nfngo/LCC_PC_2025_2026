@@ -20,11 +20,11 @@ public class ClientConnection {
     private PrintWriter out;
     private BufferedReader in;
 
-    private volatile boolean connected = false;
-//    private volatile boolean worldQueueOverflow = false;
+    private final String host;
+    private final int port;
+    private volatile boolean connected;
 
     // As listas ligadas permitem adição e remoção de elementos em tempo constante (O(1))
-
     // Queue de eventos de atualização do mundo/jogo
     private final Queue<String> stateQueue = new LinkedList<>();
     // Queue de estados (navegação entre menus)
@@ -36,13 +36,15 @@ public class ClientConnection {
 
 
     public ClientConnection(String host, int port) {
-        connect(host, port);
-        if(connected) {
-            startListening();
-        }
+        this.host = host;
+        this.port = port;
+        this.connected = false;
     }
 
-    private void connect(String host, int port) {
+    public boolean connect() {
+        if(connected) {
+            return connected;
+        }
         try {
             socket = new Socket(host, port);
 
@@ -52,22 +54,20 @@ public class ClientConnection {
             );
 
             connected = true;
+            startListening();
+
             System.out.println("Connected to server");
+            return connected;
 
         } catch (Exception e) {
             System.out.println("Connection failed: " + e.getMessage());
-            connected = false;
+            markDisconnected();
+            return connected;
         }
     }
 
     // Thread de rede (comunicação com o servidor)
-    private void startListening() {
-        /*
-        Implementação da Thread com Lambda
-        - Vantagem: É muito mais curto e evita "boilerplate" (código repetitivo).
-          Como a interface Runnable é uma interface funcional (apenas tem o método run()),
-          a lambda permite focar apenas na lógica.
-       */
+    public void startListening() {
        new Thread(() -> {
             try {
                 String line;
@@ -77,7 +77,6 @@ public class ClientConnection {
                         try {
                             if (stateQueue.size() >= MAX_WORLD_QUEUE_SIZE) {
                                 stateQueue.clear();
-//                                worldQueueOverflow = true;
                             } else {
                                 stateQueue.add(line);
                             }
@@ -99,6 +98,8 @@ public class ClientConnection {
             } catch (IOException e) {
                 // conexão encerrada (intencionalmente ou por erro)
                 System.out.println("Connection closed");
+            } finally {
+                markDisconnected();
             }
         }, "NetworkThread").start();
     }
@@ -122,14 +123,6 @@ public class ClientConnection {
             eventLock.unlock();
         }
     }
-
-/*    public boolean hasWorldQueueOverflow() {
-        return worldQueueOverflow;
-    }
-
-    public void clearWorldQueueOverflow() {
-        worldQueueOverflow = false;
-    }*/
 
     // Envio de mensagens
     public void send(String msg) {
@@ -164,16 +157,44 @@ public class ClientConnection {
         return connected && socket != null && socket.isConnected() && !socket.isClosed();
     }
 
-    // Fechar ligação
-    // Ao fazer socket.close(), será lançada uma IOException dentro da thread (no readLine()),
-    // o que fará com que o bloco catch seja executado e a thread termine a sua execução com segurança.
-    public void disconnect() {
+    private void markDisconnected() {
+        connected = false;
+
+        // Fechar socket, in e out
         try {
-            if (socket != null) socket.close();
-            connected = false;
-            System.out.println("Disconnected");
-        } catch (IOException e) {
-            System.out.println("Error closing connection");
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (IOException ignored) {
         }
+
+        if (out != null) {
+            out.close();
+        }
+
+        socket = null;
+        out = null;
+        in = null;
+
+        // Limpar queues
+        stateLock.lock();
+        try {
+            stateQueue.clear();
+        } finally {
+            stateLock.unlock();
+        }
+
+        eventLock.lock();
+        try {
+            eventQueue.clear();
+        } finally {
+            eventLock.unlock();
+        }
+    }
+
+    // Fechar ligação
+    public void disconnect() {
+        markDisconnected();
+        System.out.println("Disconnected");
     }
 }
