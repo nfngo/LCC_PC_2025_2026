@@ -1,5 +1,5 @@
 -module(game_serialization).
--export([serialize_world/3, serialize_changes/3]).
+-export([serialize_world/3, serialize_changes/3, serialize_removed_player/1, serialize_scores/1, serialize_player_score/1]).
 -include("game_entities.hrl").
 
 % Serialização das alterações no mundo (delta)
@@ -16,7 +16,7 @@ serialize_changes(Players, NewEntities, RemovedIDs) ->
             _ -> "DEL," ++ string:join([integer_to_list(ID) || ID <- RemovedIDs], ",")
         end,
 
-    string:join([UpdatedPlayersStr, NewEntitiesStr, RemovedIDsStr], ";").
+    string:join(lists:filter(fun(S) -> S /= "" end, [UpdatedPlayersStr, NewEntitiesStr, RemovedIDsStr]), ";").
 
 % Serialização do estado completo do mundo
 serialize_world(Players, Foods, Poisons) ->
@@ -76,3 +76,12 @@ serialize_created_entity({Entity, poison}) ->
     io_lib:format("X,~b,~.2f,~.2f,~.2f", [
         Entity#poison.id, Entity#poison.x, Entity#poison.y, Entity#poison.radius
     ]).
+
+serialize_removed_player(Id) ->
+    io_lib:format("DEL_P,~b", [Id]).
+
+serialize_scores(Scores) ->
+    string:join([io_lib:format("~s:~p", [U, S]) || {U, S} <- Scores], ",").
+
+serialize_player_score(PlayerScore) ->
+    io_lib:format(";SCORE,~b", [PlayerScore]).
