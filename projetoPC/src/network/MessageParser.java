@@ -90,6 +90,7 @@ public class MessageParser {
             Map<Integer, Avatar> objects
     ) {
 
+        playersMap.clear();
         objects.clear();
         String[] tokens = payload.split(";");
 

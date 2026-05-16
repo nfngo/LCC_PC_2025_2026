@@ -67,7 +67,7 @@ public class ClientConnection {
     }
 
     // Thread de rede (comunicação com o servidor)
-    public void startListening() {
+    private void startListening() {
        new Thread(() -> {
             try {
                 String line;
@@ -126,7 +126,10 @@ public class ClientConnection {
 
     // Envio de mensagens
     public void send(String msg) {
-        if (!connected) return;
+        // Cópia local para evitar race condition
+        // markDisconnected() pode correr na NetworkThread entre o if e o out.print(), pondo out = null
+        PrintWriter localOut = out;
+        if (!connected || localOut == null) return;
 
         // Forçar presença de \n para evitar bugs
         if (!msg.endsWith("\n")) {
@@ -134,10 +137,10 @@ public class ClientConnection {
         }
 
         try {
-            out.print(msg);
-            out.flush();
+            localOut.print(msg);
+            localOut.flush();
 
-            if (out.checkError()) {
+            if (localOut.checkError()) {
                 throw new IOException("Error sending message");
             }
 
@@ -157,7 +160,7 @@ public class ClientConnection {
         return connected && socket != null && socket.isConnected() && !socket.isClosed();
     }
 
-    private void markDisconnected() {
+    private synchronized void markDisconnected() {
         connected = false;
 
         // Fechar socket, in e out

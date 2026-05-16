@@ -1,5 +1,7 @@
 package input;
 
+import processing.core.PApplet;
+
 public class InputHandler {
 
     public boolean up, left, right;
@@ -14,9 +16,9 @@ public class InputHandler {
     }
 
     private void updateKey(int keyCode, boolean state) {
-        if (keyCode == 38) up = state;
-        if (keyCode == 37) left = state;
-        if (keyCode == 39) right = state;
+        if (keyCode == PApplet.UP)    up = state;
+        if (keyCode == PApplet.LEFT)  left = state;
+        if (keyCode == PApplet.RIGHT) right = state;
     }
 
     public String serialize() {

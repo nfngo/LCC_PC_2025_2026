@@ -47,7 +47,7 @@ public class Main extends PApplet {
         if (connection.isConnected()) {
 
             // Apenas envia se algo mudou (tecla premida ou solta)
-            if (input.hasChanged()) {
+            if (input.hasChanged() && stateManager.getState() == GameState.GAME) {
                 connection.sendInput(input);
             }
 
@@ -110,22 +110,18 @@ public class Main extends PApplet {
                     case SCOREBOARD_OK:
                         if(stateManager.getState() == GameState.MENU || stateManager.getState() == GameState.GAME_OVER) {
                             stateManager.getScoreboard().onGetScoreboardSuccess(sm.getPayload());
-                            break;
-                        }
-                        if(stateManager.getState() == GameState.WAITING_FOR_GAME) {
+                        } else if(stateManager.getState() == GameState.WAITING_FOR_GAME) {
                             stateManager.getWaiting().onGetScoreboardSuccess(sm.getPayload());
-                            break;
                         }
+                        break;
 
                     case SCOREBOARD_FAIL:
                         if(stateManager.getState() == GameState.MENU) {
                             stateManager.getScoreboard().onGetScoreboardFail(sm.getPayload());
-                            break;
-                        }
-                        if(stateManager.getState() == GameState.WAITING_FOR_GAME) {
+                        } else if(stateManager.getState() == GameState.WAITING_FOR_GAME) {
                             stateManager.getWaiting().onGetScoreboardFail(sm.getPayload());
-                            break;
                         }
+                        break;
 
                     case ERROR:
                         stateManager.getLogin().onError(sm.getPayload());

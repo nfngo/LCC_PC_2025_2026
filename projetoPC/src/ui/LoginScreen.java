@@ -76,11 +76,11 @@ public class LoginScreen {
         p.text("*".repeat(password.length()), centerX, passwordTextY);
         p.line(startX + 120, passwordTextY + 15, startX + boxW - 120, passwordTextY + 15);
 
-        if (selected == 0) {
+        if (isTypingUser()) {
             // Linha do username
             p.stroke(159, 199, 227);
             p.line(startX + 120, usernameTextY + 18, startX + boxW - 120, usernameTextY + 18);
-        } else if(selected == 1) {
+        } else if(isTypingPassword()) {
             // Linha da password
             p.stroke(159, 199, 227);
             p.line(startX + 120, passwordTextY + 15, startX + boxW - 120, passwordTextY + 15);
@@ -131,6 +131,14 @@ public class LoginScreen {
         p.text("[TAB] NAVIGATE | [ENTER] SELECT", centerX, startY + boxH - 25);
     }
 
+    private boolean isTypingUser() {
+        return selected == 0;
+    }
+
+    private boolean isTypingPassword() {
+        return selected == 1;
+    }
+
     public void drawSelectionCircle(String text, float startY) {
         float centerX = (float) p.width / 2;
 
@@ -145,9 +153,6 @@ public class LoginScreen {
     public void handleKey(char key, int keyCode) {
 
         if (key == '\t') {
-            if(selected == 0 || selected == 1) {
-                typingUser = !typingUser;
-            }
             selected = (selected + 1) % 5;
 
         } else if (keyCode == PApplet.ENTER) {
@@ -218,17 +223,17 @@ public class LoginScreen {
     }
 
     private void handleBackspace() {
-        if (typingUser && !username.isEmpty()) {
+        if (isTypingUser() && !username.isEmpty()) {
             username = username.substring(0, username.length()-1);
-        } else if (!typingUser && !password.isEmpty()) {
+        } else if (isTypingPassword() && !password.isEmpty()) {
             password = password.substring(0, password.length()-1);
         }
     }
 
     private void handleTyping(char key) {
-        if (typingUser) {
+        if (isTypingUser()) {
             username += key;
-        } else {
+        } else if (isTypingPassword()) {
             password += key;
         }
     }
