@@ -22,7 +22,7 @@ public class ClientConnection {
 
     private final String host;
     private final int port;
-    private volatile boolean connected;
+    private boolean connected;
 
     // As listas ligadas permitem adição e remoção de elementos em tempo constante (O(1))
     // Queue de eventos de atualização do mundo/jogo
@@ -41,9 +41,17 @@ public class ClientConnection {
         this.connected = false;
     }
 
+    private synchronized boolean getConnected() {
+        return connected;
+    }
+
+    private synchronized void setConnected(boolean connected) {
+        this.connected = connected;
+    }
+
     public boolean connect() {
-        if(connected) {
-            return connected;
+        if(getConnected()) {
+            return true;
         }
         try {
             socket = new Socket(host, port);
@@ -53,16 +61,16 @@ public class ClientConnection {
                     new InputStreamReader(socket.getInputStream())
             );
 
-            connected = true;
+            setConnected(true);
             startListening();
 
             System.out.println("Connected to server");
-            return connected;
+            return true;
 
         } catch (Exception e) {
             System.out.println("Connection failed: " + e.getMessage());
             markDisconnected();
-            return connected;
+            return false;
         }
     }
 
@@ -129,7 +137,7 @@ public class ClientConnection {
         // Cópia local para evitar race condition
         // markDisconnected() pode correr na NetworkThread entre o if e o out.print(), pondo out = null
         PrintWriter localOut = out;
-        if (!connected || localOut == null) return;
+        if (!getConnected() || localOut == null) return;
 
         // Forçar presença de \n para evitar bugs
         if (!msg.endsWith("\n")) {
@@ -140,13 +148,14 @@ public class ClientConnection {
             localOut.print(msg);
             localOut.flush();
 
+            // Fallback se markDisconnected fechar o out
             if (localOut.checkError()) {
                 throw new IOException("Error sending message");
             }
 
         } catch (Exception e) {
             System.out.println("Send failed: " + e.getMessage());
-            connected = false;
+            markDisconnected();
         }
     }
 
@@ -157,11 +166,11 @@ public class ClientConnection {
 
     // Estado da ligação
     public boolean isConnected() {
-        return connected && socket != null && socket.isConnected() && !socket.isClosed();
+        return getConnected() && socket != null && socket.isConnected() && !socket.isClosed();
     }
 
     private synchronized void markDisconnected() {
-        connected = false;
+        setConnected(false);
 
         // Fechar socket, in e out
         try {
