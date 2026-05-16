@@ -8,12 +8,12 @@
 % Duração do jogo em milissegundos (2 minutos)
 -define(GAME_TIME, 120000).
 % Números inicial, mínimo e máximo de Foods e Poisons no mapa
--define(STARTING_FOODS, 12).
--define(MIN_FOODS, 6).
--define(MAX_FOODS, 18).
--define(STARTING_POISONS, 15).
--define(MIN_POISONS, 8).
--define(MAX_POISONS, 22).
+-define(STARTING_FOODS, 14).
+-define(MIN_FOODS, 8).
+-define(MAX_FOODS, 20).
+-define(STARTING_POISONS, 10).
+-define(MIN_POISONS, 5).
+-define(MAX_POISONS, 16).
 % Fator para cálculo de distância de segurança no respawn de jogador
 -define(RESPAWN_SAFETY_RADIUS_FACTOR, 5.0).
 % Número máximo de tentativas de respawn de jogador

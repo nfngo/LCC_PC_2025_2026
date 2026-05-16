@@ -9,15 +9,15 @@
 %%    y: Posição atual do jogador no eixo dos Y (default - undefined)
 %%    angle: Ângulo atual do jogador (em radianos) (default - 0.0)
 %%    mass: Massa atual do jogador (default - 100.0)
-%%    minMass: Massa mínima de um jogador (default - 50.0)
+%%    minMass: Massa mínima de um jogador (default - 70.0)
 %%    radius: Raio atual do jogador (default - sqrt(mass/PI) * escala (3.0))
 %%    vx: Velocidade atual do jogador na direcção de X (default - 0.0)
 %%    vy: Velocidade atual do jogador na direcção de Y (default - 0.0)
 %%    angularVelocity: Velocidade angular atual do jogador (default is 0.0)
-%%    maxAngularVelocity: Velocidade angular máxima permitida a um jogador (default - 0.12)
-%%    maxVelocity: Velocidade linear máxima permitida a um jogador (default - 4.5)
-%%    force: Força atua aplicada ao jogador (default - 12.0)
-%%    torque: Torque atual aplicado ao jogador (default - 0.5)
+%%    maxAngularVelocity: Velocidade angular máxima permitida a um jogador (default - 0.08)
+%%    maxVelocity: Velocidade linear máxima permitida a um jogador (default - 3.5)
+%%    force: Força atua aplicada ao jogador (default - 9.0)
+%%    torque: Torque atual aplicado ao jogador (default - 0.35)
 %%    moving_up: Boolean a indicar se o jogador está atualmente a mexer-se para cima (default - false)
 %%    moving_left: Boolean a indicar se o jogador está atualmente a mexer-se para a esquerda (default - false)
 %%    moving_right: Boolean a indicar se o jogador está atualmente a mexer-se para a direita (default - false)
@@ -29,15 +29,15 @@
     y,
     angle = 0.0,
     mass = 100.0,
-    minMass = 50.0,
+    minMass = 70.0,
     radius = math:sqrt(100.0 / math:pi()) * 3.0,
     vx = 0.0,
     vy = 0.0,
     angularVelocity = 0.0,
-    maxAngularVelocity = 0.12,
-    maxVelocity = 4.5,
-    force = 12.0,
-    torque = 0.5,
+    maxAngularVelocity = 0.08,
+    maxVelocity = 3.5,
+    force = 9.0,
+    torque = 0.35,
     moving_up = false,
     moving_left = false,
     moving_right = false
