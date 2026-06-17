@@ -55,8 +55,8 @@ public class GameOverScreen {
 
         // Cabeçalho da Tabela
         float tableTop = startY + 200;
-        float rankX = startX + 150;
-        float scoreX = startX + boxW - 150;
+        float rankX = centerX - 150;
+        float scoreX = centerX + 150;
 
         p.textSize(16);
         p.fill(100);

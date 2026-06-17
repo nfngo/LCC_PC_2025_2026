@@ -10,76 +10,34 @@ public class MessageParser {
     // Parse genérico (tipo de mensagem)
     public static ServerMessage parseMessage(String msg) {
 
-        if (msg == null || msg.isEmpty()) {
+        if (msg == null || msg.isBlank()) {
             return new ServerMessage(ServerMessage.Type.UNKNOWN, "");
         }
 
-        if (msg.startsWith("LOGIN_OK")) {
-            return new ServerMessage(ServerMessage.Type.LOGIN_OK, "");
+        String command;
+        String payload = "";
 
-        } else if (msg.startsWith("LOGIN_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.LOGIN_FAIL, payloadAfterComma(msg));
+        int comma = msg.indexOf(',');
 
-        } else if (msg.startsWith("REGISTER_OK")) {
-            return new ServerMessage(ServerMessage.Type.REGISTER_OK, "");
-
-        } else if (msg.startsWith("REGISTER_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.REGISTER_FAIL, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("LOGOUT_OK")) {
-            return new ServerMessage(ServerMessage.Type.LOGOUT_OK, "");
-
-        } else if (msg.startsWith("DELETE_OK")) {
-            return new ServerMessage(ServerMessage.Type.DELETE_OK, "");
-
-        } else if (msg.startsWith("DELETE_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.DELETE_FAIL, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("PLAY_OK")) {
-            return new ServerMessage(ServerMessage.Type.PLAY_OK, "");
-
-        } else if (msg.startsWith("WAITING_OTHER_PLAYERS")) {
-            return new ServerMessage(ServerMessage.Type.WAITING_OTHER_PLAYERS, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("GAME_STARTING_SOON")) {
-            return new ServerMessage(ServerMessage.Type.GAME_STARTING_SOON, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("ACTIVE_GAMES_FULL")) {
-            return new ServerMessage(ServerMessage.Type.ACTIVE_GAMES_FULL, "");
-
-        } else if (msg.startsWith("GAME_START")) {
-            return new ServerMessage(ServerMessage.Type.GAME_START, "");
-
-
-        } else if (msg.startsWith("GAME_OVER")) {
-            return new ServerMessage(ServerMessage.Type.GAME_OVER, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("SCOREBOARD_OK")) {
-            return new ServerMessage(ServerMessage.Type.SCOREBOARD_OK, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("SCOREBOARD_FAIL")) {
-            return new ServerMessage(ServerMessage.Type.SCOREBOARD_FAIL, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("STATE")) {
-            return new ServerMessage(ServerMessage.Type.STATE, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("DELTA")) {
-            return new ServerMessage(ServerMessage.Type.DELTA, payloadAfterComma(msg));
-
-        } else if (msg.startsWith("ERROR")) {
-            return new ServerMessage(ServerMessage.Type.ERROR, msg);
-
+        if (comma == -1) {
+            command = msg;
         } else {
+            command = msg.substring(0, comma);
+            payload = msg.substring(comma + 1);
+        }
+
+        try {
+            ServerMessage.Type type = ServerMessage.Type.valueOf(command);
+
+            if (type == ServerMessage.Type.ERROR) {
+                payload = msg;
+            }
+
+            return new ServerMessage(type, payload);
+
+        } catch (IllegalArgumentException e) {
             return new ServerMessage(ServerMessage.Type.UNKNOWN, msg);
         }
-    }
-
-    // Verificar o payload depois da vírgula
-    private static String payloadAfterComma(String msg) {
-        int index = msg.indexOf(",");
-        return index >= 0 && index + 1 < msg.length()
-                ? msg.substring(index + 1)
-                : "";
     }
 
     // Parse estado do jogo
